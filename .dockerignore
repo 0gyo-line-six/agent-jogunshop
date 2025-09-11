@@ -1,0 +1,43 @@
+# Git 관련
+.git
+.github
+.gitignore
+
+# Python 관련
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.venv
+venv/
+env/
+
+# IDE 관련
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS 관련
+.DS_Store
+Thumbs.db
+
+# 빌드 관련
+lambda-layer/
+python/
+layer.zip
+
+# 스크립트들 (컨테이너에 불필요)
+build_layer.sh
+setup-ecr.sh
+build-and-push.sh
+build-container.sh
+deploy-lambda.sh
+README-container-deployment.md
+
+# 로그 및 임시 파일
+*.log
+response.json
+env-vars.json 

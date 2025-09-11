@@ -1,0 +1,50 @@
+# Python 관련
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 가상 환경
+venv/
+ENV/
+env/
+.env
+.venv/
+.venv
+
+# IDE 관련
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Gradio 관련
+flagged/
+logs/
+tmp/
+
+# 기타
+.env.local
+*.log
+.coverage
+htmlcov/ 
+CLAUDE.md
+.CLAUDE
+.serena
