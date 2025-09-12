@@ -1,6 +1,69 @@
 import dspy
 import os
 
+class DeliveryResponseRefiner(dspy.Signature):
+    """배송 관련 응답을 간결하고 핵심적으로 정리하는 도우미입니다.
+    
+    배송 정책 기반 응답을 받아서 핵심 정보만 간결하게 전달합니다.
+    불필요한 인사말, 부가 설명, 추가 질문 유도 등은 제거하고 
+    질문에 대한 직접적인 답변만 제공합니다.
+    
+    정리 예시:
+    - "안녕하세요. 조건샵 배송비는 2,500원이며, 7만원 이상 구매시 무료배송입니다. 감사합니다." 
+      → "배송비는 2,500원, 7만원 이상 무료배송입니다."
+    - "배송기간은 영업일 기준 최대 7일이내입니다. 지연시 부분배송 진행됩니다."
+      → "최대 7일이내 배송, 지연시 부분배송."
+    
+    주의사항:
+    - 핵심 정보는 누락하지 않음
+    - 간결하지만 이해하기 쉽게
+    - 정중한 톤은 유지하되 불필요한 표현 제거
+    """
+    
+    original_response: str = dspy.InputField(desc="원본 배송 관련 응답")
+    refined_response: str = dspy.OutputField(desc="간결하게 정리된 핵심 응답")
+
+delivery_response_refiner = dspy.ChainOfThought(DeliveryResponseRefiner)
+
+def make_response_concise(response: str) -> str:
+    """
+    DSPy를 사용하여 배송 에이전트의 응답을 간결하게 조정합니다.
+    
+    Args:
+        response (str): 원본 응답 텍스트
+        
+    Returns:
+        str: 간결하게 조정된 응답 텍스트
+    """
+    if not response or not isinstance(response, str):
+        return response
+    
+    try:
+        prediction = delivery_response_refiner(original_response=response)
+        refined_response = getattr(prediction, 'refined_response', response)
+        return refined_response.strip()
+    except Exception as e:
+        print(f"⚠️ 배송 응답 정리 중 오류: {e}")
+        # 오류 시 기본 변환 사용
+        return _fallback_refine(response)
+
+def _fallback_refine(response: str) -> str:
+    """DSPy 실패 시 사용할 기본 정리 로직"""
+    # 간단한 정리 규칙
+    unwanted = ["안녕하세요", "고객님", "감사합니다", "문의해주세요"]
+    result = response
+    for phrase in unwanted:
+        result = result.replace(phrase, "")
+    
+    # 공백 정리
+    import re
+    result = re.sub(r'\s+', ' ', result).strip()
+    
+    if not result.endswith('.'):
+        result += '.'
+        
+    return result
+
 def load_delivery_policy():
     """배송 정책 파일을 로드합니다."""
     try:
@@ -21,13 +84,13 @@ def load_delivery_policy():
 class DeliveryAgent(dspy.Signature):
     """배송 관련 문의를 처리하는 전문 상담원입니다.
     
-    배송 정책, 배송비, 배송 시간, 택배사 정보, 교환/반품 등 
-    배송과 관련된 모든 문의에 대해 정확하고 친절한 답변을 제공합니다.
+    사용자의 질문에만 간결하고 정확하게 답변합니다.
+    불필요한 인사말이나 추가 설명 없이 핵심 정보만 제공합니다.
     """
 
     user_request: str = dspy.InputField(desc="사용자의 배송 관련 문의")
     delivery_policy: str = dspy.InputField(desc="조건샵의 배송 정책 및 택배사 정보")
-    delivery_result: str = dspy.OutputField(desc="배송 정책을 바탕으로 한 정확하고 친절한 답변")
+    delivery_result: str = dspy.OutputField(desc="질문에 대한 간결하고 정확한 답변 (핵심 정보만)")
 
 delivery_agent = dspy.ChainOfThought(DeliveryAgent)
 
@@ -39,84 +102,20 @@ def run_delivery_agent(user_request: str):
         
         print(f"🚚 배송 문의 처리 중: {user_request}")
         
-        # DSPy 에이전트 실행
         prediction = delivery_agent(
             user_request=user_request,
             delivery_policy=delivery_policy
         )
         
-        print(f"✅ 배송 문의 처리 완료")
+        if hasattr(prediction, 'delivery_result') and prediction.delivery_result:
+            original_result = prediction.delivery_result
+            concise_result = make_response_concise(original_result)
+            prediction.delivery_result = concise_result
         return prediction
         
     except Exception as e:
         print(f"❌ 배송 에이전트 오류: {e}")
-        # 에러 시 기본 응답 반환
         class DefaultResponse:
             def __init__(self):
-                self.delivery_result = "죄송합니다. 배송 관련 문의 처리 중 오류가 발생했습니다. 고객센터(1588-1234)로 문의해주시기 바랍니다."
+                self.delivery_result = "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리게습니다."
         return DefaultResponse()
-
-if __name__ == "__main__":
-    """배송 에이전트 테스트"""
-    from core.config import config
-    
-    # DSPy 설정
-    def setup_dspy():
-        """DSPy 언어 모델 설정"""
-        try:
-            if config.is_azure_openai_ready:
-                lm = dspy.LM(
-                    model=f"azure/{config.AZURE_OPENAI_DEPLOYMENT_ID}",
-                    api_base=config.AZURE_OPENAI_ENDPOINT,
-                    api_version=config.AZURE_OPENAI_API_VERSION,
-                    api_key=config.AZURE_OPENAI_API_KEY,
-                    cache=True
-                )
-                dspy.configure(lm=lm)
-                print("✅ DSPy Azure OpenAI 설정 완료")
-                return True
-            else:
-                print("❌ Azure OpenAI 설정이 없습니다")
-                return False
-        except Exception as e:
-            print(f"❌ DSPy 설정 오류: {e}")
-            return False
-
-    print("🚚 조건샵 배송 에이전트 테스트")
-    print("=" * 50)
-    
-    # DSPy 설정
-    if not setup_dspy():
-        print("❌ DSPy 설정 실패로 테스트를 중단합니다.")
-        exit(1)
-    
-    # 테스트 케이스들
-    test_cases = [
-        "배송비가 얼마인가요?",
-        "무료배송 조건이 어떻게 되나요?",
-        "언제 발송되나요?",
-        "배송 조회는 어떻게 하나요?",
-        "제주도 배송 가능한가요?",
-        "교환하고 싶은데 배송비가 얼마인가요?",
-        "당일배송 가능한가요?",
-        "주말에도 배송되나요?",
-        "배송지 변경하고 싶어요",
-        "CJ택배 연락처 알려주세요"
-    ]
-    
-    for i, test_request in enumerate(test_cases, 1):
-        print(f"\n🧪 테스트 {i}: {test_request}")
-        print("-" * 40)
-        
-        try:
-            result = run_delivery_agent(test_request)
-            if result:
-                print(f"✅ 답변: {result.delivery_result}")
-            else:
-                print("❌ 응답을 받지 못했습니다.")
-        except Exception as e:
-            print(f"❌ 테스트 실행 중 오류: {e}")
-        
-        print("=" * 50)
-    
-    print("\n🎯 배송 에이전트 테스트 완료!")

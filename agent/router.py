@@ -71,12 +71,10 @@ def route_request(user_request: str, chat_history: str = None) -> dict:
         print(f"📝 사용자 요청: {user_request}")
         
         if chat_history:
-            print("👤 사용자 정보 추출 중...")
             user_info = extract_user_info(chat_history)
             missing_info = validate_required_info(user_info)
             
             if missing_info:
-                print(f"⚠️ 누락된 정보: {missing_info}")
                 return {
                     'category': 'info_request',
                     'reasoning': f'필수 정보 누락: {", ".join(missing_info)}',
@@ -93,12 +91,8 @@ def route_request(user_request: str, chat_history: str = None) -> dict:
                 print(f"   연락처: {user_info['contact_info']}")
                 print(f"   문의내용: {user_info['inquiry_content']}")
         
-        print("🔍 요청 분류 중...")
         category, reasoning = classify_user_request(user_request)
-        
-        print(f"📋 분류 결과: {category}")
-        print(f"💭 분류 근거: {reasoning}")
-        
+                
         result = {
             'category': category,
             'reasoning': reasoning,
@@ -208,27 +202,20 @@ if __name__ == "__main__":
     if not setup_dspy():
         print("❌ DSPy 설정 실패로 테스트를 중단합니다.")
         exit(1)
-    
-    # 테스트 케이스 - webhook.py 스타일의 채팅 메시지 형태
+
     test_cases = [
         {
             "name": "완전한 정보 - 상품 문의",
-            "request": "오늘 주문하면 언제 배송되나요?",
+            "request": "데일리용 기획 2type 카라 반팔티 3XL 가격 얼마인가요?",
             "messages": [
                 {"personType": "user", "plainText": "안녕하세요!"},
                 {"personType": "user", "plainText": "김철수입니다."},
-                {"personType": "user", "plainText": "연락처는 010-1234-5678이고요."},
-                {"personType": "user", "plainText": "택배사가 어디인가요?"},
-                {"personType": "manager", "plainText": "우체국택배입니다!"},
+                {"personType": "user", "plainText": "010-1234-5678"},
             ]
         }
     ]
     
-    for i, test_case in enumerate(test_cases, 1):
-        print(f"\n🧪 테스트 {i}: {test_case['name']}")
-        print(f"📝 요청: {test_case['request']}")
-        
-        # webhook.py와 동일한 방식으로 채팅 기록 생성
+    for i, test_case in enumerate(test_cases, 1):        
         chat_history = create_chat_history_from_messages(test_case['messages'])
         full_chat_history = f"{chat_history}\n고객: {test_case['request']}" if chat_history else f"고객: {test_case['request']}"
         
@@ -237,22 +224,6 @@ if __name__ == "__main__":
         
         try:
             result = route_request(test_case['request'], full_chat_history)
-            
-            print(f"✅ 최종 결과:")
-            print(f"   카테고리: {result['category']}")
-            print(f"   사용된 에이전트: {result['agent_used']}")
-            print(f"   성공 여부: {result['success']}")
-            print(f"   응답: {result['response']}")
-            
-            if 'missing_info' in result:
-                print(f"   누락된 정보: {result['missing_info']}")
-            if 'extracted_info' in result:
-                print(f"   추출된 정보: {result['extracted_info']}")
-                
+            print(f"🎯 응답: {result['response']}")
         except Exception as e:
             print(f"❌ 테스트 실행 중 오류: {e}")
-        
-        print("=" * 50)
-    
-    print("\n🎯 테스트 완료!")
-    print("사용자 정보 검증 기능이 정상적으로 작동하는지 확인하세요.")
