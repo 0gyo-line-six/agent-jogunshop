@@ -198,7 +198,23 @@ class ChatService:
         log(self.request_id, "WEBHOOK", f"AI 응답 생성 시작: '{last_message}'")
         start_time = time.time()
         try:
-            result = route_request(last_message)
+            chat_history_messages = self.fetch_history()
+            chat_history = ""
+            if chat_history_messages:
+                history_lines = []
+                for msg in chat_history_messages:
+                    person_type = "고객" if msg.get("personType") == "user" else "상담원"
+                    text = msg.get("plainText", "")
+                    if text:
+                        history_lines.append(f"{person_type}: {text}")
+                chat_history = "\n".join(history_lines)
+                log(self.request_id, "WEBHOOK", f"채팅 기록 조회됨: {len(chat_history_messages)}개 메시지")
+            else:
+                log(self.request_id, "WEBHOOK", "채팅 기록이 없음")
+            
+            full_chat_history = f"{chat_history}\n고객: {last_message}" if chat_history else f"고객: {last_message}"
+            
+            result = route_request(last_message, full_chat_history)
             end_time = time.time()
             log(self.request_id, "WEBHOOK", f"AI 응답 생성 완료: '{last_message}' ({end_time - start_time:.1f}초)")
             return result.get('response', '보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리게습니다.')
