@@ -408,8 +408,105 @@ def find_product_by_partial_name(partial_name: str) -> str:
     except Exception as e:
         return f"상품 검색 중 오류 발생: {e}"
 
+def check_unsupported_request(user_request: str) -> str:
+    """
+    현재 지원하지 않는 기능에 대한 요청인지 LLM이 판단하여 예외 처리
+    
+    지원하는 기능:
+    - 상품의 색상, 사이즈, 타입 옵션 조회
+    - 상품 가격, 재고, 판매 상태 조회
+    - 옵션별 가격 정보 조회
+    - 상품 검색 및 부분 상품명으로 상품 찾기
+    
+    지원하지 않는 기능:
+    - 사이즈 추천, 상품 추천
+    - 상품 간 비교, 순위
+    - 주문, 구매, 결제 관련
+    - 배송, 환불, 교환 등 고객 서비스
+    - 리뷰, 평점, 후기
+    - 사진, 이미지 관련
+    - 회원 관리, 로그인 등
+    """
+    
+    # 명확히 지원하지 않는 요청들을 판단
+    unsupported_patterns = [
+        # 추천 관련
+        '추천', '추천해', '어떤 게', '뭐가 좋', '골라', '선택해',
+        
+        # 비교 관련  
+        '비교', '차이', '다른점', '어떤 것이 더', 'vs', '대신',
+        
+        # 사이즈 추천
+        '사이즈 추천', '몇 사이즈', '어떤 사이즈', '사이즈 골라',
+        
+        # 주문/구매 관련
+        '주문', '구매', '사고 싶', '장바구니', '결제', '카드',
+        
+        # 배송/고객서비스
+        '배송', '언제 와', '환불', '교환', '반품', '취소',
+        
+        # 리뷰/평가
+        '리뷰', '평점', '후기', '어때', '좋아',
+        
+        # 이미지/사진
+        '사진', '이미지', '모델', '착용샷', '코디',
+        
+        # 회원/계정
+        '회원', '가입', '로그인', '비밀번호',
+        
+        # 기타 서비스
+        '고객센터', '문의', '전화', '상담',
+        
+        # 일반 대화
+        '안녕', '하이', '반가워', '고마워', '감사'
+    ]
+    
+    request_lower = user_request.lower().strip()
+    
+    # 요청이 너무 짧은 경우
+    if len(request_lower) < 3:
+        return "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리게습니다."
+    
+    # 지원하지 않는 패턴이 포함된 경우
+    for pattern in unsupported_patterns:
+        if pattern in request_lower:
+            return "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리게습니다."
+    
+    # 지원하는 기능 키워드 확인
+    supported_keywords = [
+        '색상', '컬러', '사이즈', '크기', '타입', '종류',
+        '가격', '얼마', '재고', '품절', '판매', '상태',
+        '옵션', '정보', '찾아', '검색', '상품', '제품'
+    ]
+    
+    has_supported_keyword = any(keyword in request_lower for keyword in supported_keywords)
+    
+    # 지원하는 키워드가 없으면 예외 처리
+    if not has_supported_keyword:
+        return "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리게습니다."
+    
+    # 정상적인 지원 가능한 요청으로 판단되는 경우 None 반환 (다른 도구들이 처리)
+    return None
+
 class ProductQueryAgent(dspy.Signature):
-    """당신은 상품 정보를 조회하는 도우미입니다. 사용자의 요청에 따라 적절한 도구를 선택하여 상품의 색상, 사이즈, 타입, 가격, 재고, 옵션별 가격, 판매 상태 정보를 제공하거나 상품을 검색하고, 부분 상품명으로 정확한 상품을 찾을 수 있습니다."""
+    """당신은 상품 정보를 조회하는 도우미입니다. 
+    
+    먼저 check_unsupported_request로 요청이 지원 가능한지 확인하고, 지원하지 않는 요청이면 예외 처리 메시지를 반환하세요.
+    
+    지원하는 기능만 처리하세요:
+    - 상품의 색상, 사이즈, 타입 옵션 조회
+    - 상품 가격, 재고, 판매 상태 조회  
+    - 옵션별 가격 정보 조회
+    - 상품 검색 및 부분 상품명으로 상품 찾기
+    
+    지원하지 않는 기능:
+    - 사이즈 추천, 상품 추천, 상품 비교
+    - 주문, 구매, 결제, 배송, 환불 등
+    - 리뷰, 평점, 이미지, 회원 관리 등
+
+    예외 처리 메시지:
+    보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리게습니다.
+    """
 
     user_request: str = dspy.InputField()
     query_result: str = dspy.OutputField(
@@ -419,6 +516,7 @@ class ProductQueryAgent(dspy.Signature):
 agent = dspy.ReAct(
     ProductQueryAgent,
     tools=[
+        check_unsupported_request,
         find_product_colors,
         find_product_sizes,
         find_product_types,

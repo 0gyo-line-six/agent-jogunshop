@@ -3,6 +3,7 @@
 온톨로지 로딩, 캐싱, SPARQL 쿼리 등을 중앙화하여 관리
 """
 import os
+import boto3
 from typing import Optional, List, Tuple
 from owlready2 import get_ontology, sync_reasoner, destroy_entity
 from core.config import Config
@@ -24,11 +25,45 @@ class OntologyManager:
             self._initialized = True
             self._load_ontology()
     
+    def _download_ontology_from_s3(self) -> bool:
+        """S3에서 온톨로지 파일을 다운로드합니다."""
+        try:
+            print(f"📥 S3에서 온톨로지 파일 다운로드 중... (버킷: {Config.S3_BUCKET_NAME}, 키: {Config.ONTOLOGY_S3_KEY})")
+            
+            s3_client = boto3.client('s3')
+            
+            # 로컬 디렉토리 생성
+            os.makedirs(os.path.dirname(Config.LOCAL_ONTOLOGY_PATH), exist_ok=True)
+            
+            # S3에서 파일 다운로드
+            s3_client.download_file(
+                Config.S3_BUCKET_NAME,
+                Config.ONTOLOGY_S3_KEY,
+                Config.LOCAL_ONTOLOGY_PATH
+            )
+            
+            print(f"✅ S3에서 온톨로지 파일 다운로드 완료: {Config.LOCAL_ONTOLOGY_PATH}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ S3에서 온톨로지 파일 다운로드 실패: {e}")
+            return False
+    
     def _load_ontology(self) -> None:
         """온톨로지를 로딩하고 추론기를 동기화합니다."""
         try:
-            ontology_path = Config.ONTOLOGY_PATH
+            # S3에서 온톨로지 파일 다운로드 시도
+            if not os.path.exists(Config.LOCAL_ONTOLOGY_PATH):
+                if not self._download_ontology_from_s3():
+                    return
+            else:
+                # 로컬 파일이 있어도 S3에서 최신 버전을 다운로드
+                print("🔄 최신 온톨로지 파일을 위해 S3에서 다시 다운로드 중...")
+                if not self._download_ontology_from_s3():
+                    print("⚠️ S3 다운로드 실패, 로컬 파일 사용")
             
+            # 로컬 파일로 온톨로지 로딩
+            ontology_path = Config.LOCAL_ONTOLOGY_PATH
             if not os.path.exists(ontology_path):
                 print(f"⚠️ 온톨로지 파일을 찾을 수 없습니다: {ontology_path}")
                 return
@@ -87,7 +122,7 @@ class OntologyManager:
     def get_schema_text(self) -> str:
         """온톨로지 스키마 텍스트를 반환합니다 (인스턴스 제외)."""
         try:
-            ontology_path = Config.ONTOLOGY_PATH
+            ontology_path = Config.LOCAL_ONTOLOGY_PATH
             with open(ontology_path, "r", encoding="utf-8") as f:
                 lines = []
                 for line in f:
@@ -122,7 +157,7 @@ class OntologyManager:
             return False
         
         try:
-            save_path = file_path or Config.ONTOLOGY_PATH
+            save_path = file_path or Config.LOCAL_ONTOLOGY_PATH
             self._ontology.save(file=save_path)
             print(f"✅ 온톨로지 저장 완료: {save_path}")
             return True

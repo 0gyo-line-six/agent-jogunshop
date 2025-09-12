@@ -25,6 +25,11 @@ class Config:
     # DSPy 캐시 설정
     DSPY_CACHE_DIR = os.getenv('DSPY_CACHE_DIR', '/tmp/dspy_cache')
     
+    # S3 설정
+    S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME', '09women-bucket')
+    ONTOLOGY_S3_KEY = os.getenv('ONTOLOGY_S3_KEY', 'ontology.owl')
+    LOCAL_ONTOLOGY_PATH = os.getenv('LOCAL_ONTOLOGY_PATH', '/tmp/ontology.owl')
+    
     @property
     def is_azure_openai_ready(self) -> bool:
         """Azure OpenAI 사용 준비 여부 확인"""
@@ -56,7 +61,6 @@ def _print_config_status():
     print("[CONFIG] 애플리케이션 초기화 중...")
     print(f"[CONFIG] Azure OpenAI: {'✓ 사용가능' if config.is_azure_openai_ready else '✗ 미설정'}")
     print(f"[CONFIG] Channel API: {'✓ 사용가능' if config.is_channel_api_ready else '✗ 미설정'}")
-    print(f"[CONFIG] Delivery Tracker: {'✓ 사용가능' if config.is_delivery_tracker_ready else '✗ 미설정'}")
     print(f"[CONFIG] DSPy: {'✓ 사용가능' if config.is_dspy_ready else '✗ 미설정'}")
     print(f"[CONFIG] DSPy 캐시 디렉토리: {config.DSPY_CACHE_DIR}")
     print(f"[CONFIG] Step Functions: {'✓ 사용가능' if config.is_state_machine_ready else '✗ 미설정'}")

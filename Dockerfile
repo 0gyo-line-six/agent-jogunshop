@@ -1,10 +1,10 @@
-FROM public.ecr.aws/lambda/python:3.13 AS builder
+FROM public.ecr.aws/lambda/python:3.11 AS builder
 
 WORKDIR ${LAMBDA_TASK_ROOT}
 
-# Install system dependencies for owlready2 and other packages
+# Install system dependencies - try yum first for Amazon Linux
 RUN yum update -y && \
-    yum install -y gcc gcc-c++ make && \
+    yum install -y gcc gcc-c++ make java-11-amazon-corretto-headless && \
     yum clean all
 
 COPY requirements.txt .
@@ -13,7 +13,7 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt --target . --verbose
 
-FROM public.ecr.aws/lambda/python:3.13
+FROM public.ecr.aws/lambda/python:3.11
 
 WORKDIR ${LAMBDA_TASK_ROOT}
 

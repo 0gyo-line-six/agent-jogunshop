@@ -91,3 +91,58 @@ def route_request(user_request: str) -> dict:
             'agent_used': 'error_handler',
             'success': False
         }
+
+if __name__ == "__main__":
+    from core.config import config
+
+    # DSPy 설정
+    def setup_dspy():
+        """DSPy 언어 모델 설정"""
+        try:
+            if config.is_azure_openai_ready:
+                lm = dspy.LM(
+                    model=f"azure/{config.AZURE_OPENAI_DEPLOYMENT_ID}",
+                    api_base=config.AZURE_OPENAI_ENDPOINT,
+                    api_version=config.AZURE_OPENAI_API_VERSION,
+                    api_key=config.AZURE_OPENAI_API_KEY,
+                    cache=True
+                )
+                dspy.configure(lm=lm)
+                print("✅ DSPy Azure OpenAI 설정 완료")
+                return True
+            else:
+                print("❌ Azure OpenAI 설정이 없습니다")
+                return False
+        except Exception as e:
+            print(f"❌ DSPy 설정 오류: {e}")
+            return False
+
+    print("🚀 조건샵 에이전트 라우터 테스트")
+    print("=" * 50)
+    
+    # DSPy 설정
+    if not setup_dspy():
+        print("❌ DSPy 설정 실패로 테스트를 중단합니다.")
+        exit(1)
+    
+    # 테스트 케이스들
+    test_cases = [        
+        "washable signature cash viscose 니트 색상 어떤거 있나요?"
+        "washable signature cash viscose 니트 가격 얼마인가요?"
+        "washable signature cash viscose 니트 L사이즈 저한테 맞을까요?",
+        "washable signature cash viscose 니트랑 치노팬츠 L사이즈 블랙 저한테 괜찮을까요?"
+    ]
+    
+    for i, test_request in enumerate(test_cases, 1):
+        print(f"\n🧪 테스트 {i}: {test_request}")
+        print("-" * 40)
+        
+        result = route_request(test_request)
+        
+        print(f"✅ 최종 결과:")
+        print(f"   카테고리: {result['category']}")
+        print(f"   사용된 에이전트: {result['agent_used']}")
+        print(f"   성공 여부: {result['success']}")
+        print(f"   응답: {result['response']}")
+        
+        print("=" * 50)
