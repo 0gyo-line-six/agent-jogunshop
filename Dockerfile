@@ -3,12 +3,15 @@ FROM public.ecr.aws/lambda/python:3.13
 
 WORKDIR ${LAMBDA_TASK_ROOT}
 
-# 빌드에 필요한 도구들 설치
+# 시스템 패키지 설치
 RUN dnf update -y && \
-    dnf install -y gcc gcc-c++ make cmake git tar gzip && \
+    dnf install -y gcc gcc-c++ make cmake git tar gzip \
+                   sqlite sqlite-devel \
+                   libxml2 libxml2-devel \
+                   libxslt libxslt-devel && \
     dnf clean all
 
-# 의존성 파일 복사 및 설치
+# 파이썬 패키지 설치
 COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -v -r requirements.txt

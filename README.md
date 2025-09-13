@@ -61,9 +61,13 @@ aws ecr list-images --repository-name agent-jogunshop --query 'imageIds[*]' --ou
 jq -r '.[] | "imageDigest=" + .imageDigest' | \
 xargs -I {} aws ecr batch-delete-image --repository-name agent-jogunshop --image-ids {} 2>/dev/null || true
 
+# Account ID 자동 확인
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+echo "Account ID: $ACCOUNT_ID"
+
 # 로컬 이미지와 캐시 완전 정리
 docker rmi agent-jogunshop:latest 2>/dev/null || true
-docker rmi <account-id>.dkr.ecr.ap-northeast-2.amazonaws.com/agent-jogunshop:* 2>/dev/null || true
+docker rmi $ACCOUNT_ID.dkr.ecr.ap-northeast-2.amazonaws.com/agent-jogunshop:* 2>/dev/null || true
 docker system prune -af
 docker builder prune -af
 ```
@@ -80,10 +84,6 @@ docker image inspect agent-jogunshop:latest --format '{{.Architecture}}'
 
 ### 3. ECR에 이미지 푸시 (안정적인 방법)
 ```bash
-# Account ID 자동 확인
-ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-echo "Account ID: $ACCOUNT_ID"
-
 # ECR 로그인
 aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.ap-northeast-2.amazonaws.com
 
@@ -98,10 +98,9 @@ docker push $ACCOUNT_ID.dkr.ecr.ap-northeast-2.amazonaws.com/agent-jogunshop:$IM
 
 ### 4. Lambda 함수 생성/업데이트
 ```bash
-# 위에서 설정한 IMAGE_TAG 사용
-FULL_IMAGE_URI="$ACCOUNT_ID.dkr.ecr.ap-northeast-2.amazonaws.com/agent-jogunshop:$IMAGE_TAG"
 
 # 함수가 없는 경우
+FULL_IMAGE_URI="$ACCOUNT_ID.dkr.ecr.ap-northeast-2.amazonaws.com/agent-jogunshop:$IMAGE_TAG"
 aws lambda create-function \
   --function-name agent-jogunshop \
   --package-type Image \
@@ -112,6 +111,7 @@ aws lambda create-function \
   --architectures arm64 2>/dev/null || echo "함수가 이미 존재합니다."
 
 # 함수가 있는 경우
+FULL_IMAGE_URI="$ACCOUNT_ID.dkr.ecr.ap-northeast-2.amazonaws.com/agent-jogunshop:$IMAGE_TAG"
 aws lambda update-function-code \
   --function-name agent-jogunshop \
   --image-uri $FULL_IMAGE_URI

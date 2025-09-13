@@ -25,6 +25,13 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Get AWS Account ID
+        id: aws-account
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "account-id=$ACCOUNT_ID" >> $GITHUB_OUTPUT
+          echo "Account ID: $ACCOUNT_ID"
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
@@ -34,29 +41,169 @@ jobs:
           aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} 2>/dev/null || \
           aws ecr create-repository --repository-name ${{ env.ECR_REPOSITORY }}
 
-      - name: Build and push Docker image
+      - name: Clean up ECR and Docker cache (README 방식)
+        run: |
+          echo "🧹 기존 빌드 완전 정리 중 (README 최적화 방식)..."
+          
+          # ECR의 모든 이미지 삭제 (README 방식)
+          echo "🗑️ ECR 이미지 정리 중..."
+          aws ecr list-images --repository-name ${{ env.ECR_REPOSITORY }} --query 'imageIds[*]' --output json 2>/dev/null | \
+          jq -r '.[] | "imageDigest=" + .imageDigest' | \
+          xargs -I {} aws ecr batch-delete-image --repository-name ${{ env.ECR_REPOSITORY }} --image-ids {} 2>/dev/null || true
+          
+          # 로컬 이미지와 캐시 완전 정리 (README 방식)
+          echo "💾 로컬 이미지 정리 중..."
+          docker rmi ${{ env.ECR_REPOSITORY }}:latest 2>/dev/null || true
+          docker rmi ${{ steps.aws-account.outputs.account-id }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:* 2>/dev/null || true
+          docker system prune -af
+          docker builder prune -af
+          
+          echo "✅ 완전 정리 완료 (ECR + 로컬)"
+
+      - name: Build Docker image (README 최적화 방식)
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
+          IMAGE_TAG: v$(date +%Y%m%d-%H%M%S)
         run: |
-          # 멀티 스테이지 빌드로 이미지 생성
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "🔨 Docker 이미지 빌드 시작 (README 방식)..."
           
-          # latest 태그도 푸시
-          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          # README의 날짜 기반 고유 태그 생성
+          TIMESTAMP_TAG="v$(date +%Y%m%d-%H%M%S)"
+          echo "📅 타임스탬프 태그: $TIMESTAMP_TAG"
           
-          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          # buildx 비활성화로 단일 아키텍처 이미지 강제 생성 (README 방식)
+          export DOCKER_BUILDKIT=0
+          echo "🔧 DOCKER_BUILDKIT=0 설정 완료"
+          
+          # 캐시 없이 깨끗한 빌드 (README 방식)
+          docker build --pull --no-cache -t ${{ env.ECR_REPOSITORY }}:latest .
+          
+          # 빌드된 이미지 아키텍처 확인 (README 방식)
+          ARCH=$(docker image inspect ${{ env.ECR_REPOSITORY }}:latest --format '{{.Architecture}}')
+          echo "빌드된 이미지 아키텍처: $ARCH"
+          
+          # ECR 태그 적용 (README 방식의 고유 태그)
+          docker tag ${{ env.ECR_REPOSITORY }}:latest $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$TIMESTAMP_TAG
+          docker tag ${{ env.ECR_REPOSITORY }}:latest $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:latest
+          
+          echo "image-tag=$TIMESTAMP_TAG" >> $GITHUB_OUTPUT
+          echo "full-image-uri=$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$TIMESTAMP_TAG" >> $GITHUB_OUTPUT
+          
+          echo "✅ Docker 이미지 빌드 완료 (README 방식)"
         id: build-image
 
-      - name: Update Lambda function
+      - name: Push Docker image to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.build-image.outputs.image-tag }}
         run: |
+          echo "📤 ECR에 이미지 푸시 중..."
+          
+          # 고유한 태그로 푸시 (Image Manifest 충돌 방지)
+          docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
+          
+          # latest 태그도 푸시
+          docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:latest
+          
+          echo "✅ ECR 푸시 완료"
+
+      - name: Create Lambda function if not exists
+        env:
+          FULL_IMAGE_URI: ${{ steps.build-image.outputs.full-image-uri }}
+        run: |
+          echo "🔍 Lambda 함수 존재 여부 확인..."
+          
+          if aws lambda get-function --function-name ${{ env.LAMBDA_FUNCTION_NAME }} 2>/dev/null; then
+            echo "✅ Lambda 함수가 이미 존재합니다."
+          else
+            echo "🚀 새 Lambda 함수 생성 중..."
+            aws lambda create-function \
+              --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+              --package-type Image \
+              --code ImageUri=$FULL_IMAGE_URI \
+              --role arn:aws:iam::${{ steps.aws-account.outputs.account-id }}:role/lambda-execution-role \
+              --timeout 900 \
+              --memory-size 1024 \
+              --architectures arm64 \
+              --environment Variables='{
+                "DSPY_CACHE_DIR": "/tmp/dspy_cache"
+              }'
+            echo "✅ Lambda 함수 생성 완료"
+          fi
+
+      - name: Update Lambda function code
+        env:
+          FULL_IMAGE_URI: ${{ steps.build-image.outputs.full-image-uri }}
+        run: |
+          echo "🔄 Lambda 함수 코드 업데이트 중..."
+          echo "Image URI: $FULL_IMAGE_URI"
+          
           aws lambda update-function-code \
             --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
-            --image-uri ${{ steps.build-image.outputs.image }}
+            --image-uri $FULL_IMAGE_URI
+          
+          echo "✅ Lambda 함수 코드 업데이트 시작"
 
-      - name: Wait for update to complete
+      - name: Wait for update to complete and verify
         run: |
+          echo "⏳ Lambda 함수 업데이트 완료 대기 중..."
+          
           aws lambda wait function-updated-v2 --function-name ${{ env.LAMBDA_FUNCTION_NAME }}
-          echo "✅ Lambda 함수 업데이트 완료: ${{ steps.build-image.outputs.image }}"
+          
+          echo "🔍 Lambda 함수 상태 확인..."
+          FUNC_STATE=$(aws lambda get-function --function-name ${{ env.LAMBDA_FUNCTION_NAME }} --query 'Configuration.State' --output text)
+          echo "함수 상태: $FUNC_STATE"
+          
+          if [ "$FUNC_STATE" = "Active" ]; then
+            echo "✅ Lambda 함수 업데이트 완료 및 활성화됨"
+            
+            # 함수 정보 출력
+            aws lambda get-function --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+              --query 'Configuration.{
+                FunctionName:FunctionName,
+                Runtime:Runtime,
+                MemorySize:MemorySize,
+                Timeout:Timeout,
+                LastModified:LastModified,
+                CodeSha256:CodeSha256
+              }' --output table
+          else
+            echo "❌ Lambda 함수가 비활성 상태입니다: $FUNC_STATE"
+            exit 1
+          fi
+
+      - name: Test Lambda function
+        run: |
+          echo "🧪 Lambda 함수 테스트 중..."
+          
+          # 간단한 테스트 페이로드로 함수 호출
+          aws lambda invoke \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --payload '{"test": true, "message": "GitHub Actions 배포 테스트"}' \
+            --cli-binary-format raw-in-base64-out \
+            response.json
+          
+          # 응답 확인
+          if [ -f response.json ]; then
+            echo "📄 Lambda 응답:"
+            cat response.json
+            echo ""
+            echo "✅ Lambda 함수 테스트 완료"
+          else
+            echo "❌ Lambda 함수 테스트 실패"
+            exit 1
+          fi
+
+      - name: Deployment summary
+        env:
+          IMAGE_TAG: ${{ steps.build-image.outputs.image-tag }}
+          FULL_IMAGE_URI: ${{ steps.build-image.outputs.full-image-uri }}
+        run: |
+          echo "🎉 배포 완료 요약"
+          echo "=================="
+          echo "📦 이미지 태그: $IMAGE_TAG"
+          echo "🔗 이미지 URI: $FULL_IMAGE_URI"
+          echo "⚡ Lambda 함수: ${{ env.LAMBDA_FUNCTION_NAME }}"
+          echo "🌏 리전: ${{ env.AWS_REGION }}"
+          echo "🕒 배포 시간: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+          echo "✅ 배포가 성공적으로 완료되었습니다!"

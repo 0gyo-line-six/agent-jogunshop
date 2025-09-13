@@ -91,7 +91,7 @@ class OntologyManager:
             print(f"📖 온톨로지 파일 읽기 시작: {ontology_path}")
             
             print("📊 온톨로지 파일 내용 로딩 중...")
-            # 절대 경로로 변환하여 file URI 생성
+            # 절대 경로로 변환
             abs_path = os.path.abspath(ontology_path)
             print(f"🔍 절대 경로: {abs_path}")
             
@@ -103,13 +103,118 @@ class OntologyManager:
             file_size = os.path.getsize(abs_path)
             print(f"📏 로딩 직전 파일 크기: {file_size:,} bytes")
             
-            # Lambda 환경을 위한 owlready2 설정
+            # Lambda 환경을 위한 owlready2 설정 및 디버깅
             import owlready2
-            # Lambda의 /tmp 디렉토리를 owlready2 작업 디렉토리로 설정
-            owlready2.onto_path.append("/tmp")
+            import tempfile
             
-            # owlready2는 직접 파일 경로를 사용하는 것이 더 안정적
-            self._ontology = get_ontology(abs_path).load()
+            try:
+                version = getattr(owlready2, '__version__', 'unknown')
+                if version == 'unknown':
+                    version = getattr(owlready2, 'VERSION', 'unknown')
+                print(f"🔧 owlready2 버전: {version}")
+            except Exception:
+                print("🔧 owlready2 버전: 확인불가 (정상동작)")
+            
+            # Lambda 환경 최적화 설정
+            print("🔧 Lambda 환경 최적화 설정 중...")
+            
+            # onto_path 설정
+            print(f"🗂️ 기본 onto_path: {owlready2.onto_path}")
+            owlready2.onto_path.clear()
+            owlready2.onto_path.append("/tmp")
+            print(f"📁 onto_path 설정: {owlready2.onto_path}")
+            
+            # owlready2 백엔드를 메모리 모드로 설정
+            try:
+                owlready2.default_world.set_backend(filename=":memory:")
+                print("💾 owlready2 백엔드를 메모리 모드로 설정")
+            except Exception as e:
+                print(f"⚠️ 메모리 백엔드 설정 실패: {e}")
+            
+            # tempfile 설정
+            tempfile.tempdir = "/tmp"
+            
+            # /tmp 디렉토리 여유 공간 확인
+            import shutil
+            free_space = shutil.disk_usage("/tmp").free
+            print(f"💽 /tmp 디렉토리 여유 공간: {free_space / (1024*1024):.1f} MB")
+            
+            # 파일을 /tmp에 복사하여 권한 문제 해결
+            import shutil
+            copied_path = "/tmp/ontology_copy.owl"
+            try:
+                shutil.copy2(abs_path, copied_path)
+                print(f"📋 파일 복사 완료: {copied_path}")
+            except Exception as e:
+                print(f"⚠️ 파일 복사 실패: {e}")
+                copied_path = abs_path
+            
+            # file:// URI 형식으로 시도
+            file_uri = f"file://{abs_path}"
+            print(f"🌐 file URI: {file_uri}")
+            
+            # 파일 상태 상세 정보
+            import stat
+            file_stat = os.stat(abs_path)
+            print(f"📊 파일 상태:")
+            print(f"  - 크기: {file_stat.st_size:,} bytes")
+            print(f"  - 모드: {oct(file_stat.st_mode)}")
+            print(f"  - 수정 시간: {file_stat.st_mtime}")
+            print(f"  - 접근 시간: {file_stat.st_atime}")
+            
+            # 여러 방식으로 로딩 시도
+            loading_methods = [
+                ("복사된 파일", copied_path),
+                ("직접 경로", abs_path),
+                ("file URI", file_uri),
+                ("상대 경로", ontology_path)
+            ]
+            
+            for method_name, path_to_try in loading_methods:
+                try:
+                    print(f"🔄 {method_name}으로 로딩 시도: {path_to_try}")
+                    
+                    # 파일 존재 확인
+                    if not os.path.exists(path_to_try):
+                        print(f"⚠️ 파일이 존재하지 않음: {path_to_try}")
+                        continue
+                    
+                    # owlready2 로딩 시도
+                    onto = get_ontology(path_to_try)
+                    print(f"✅ 온톨로지 객체 생성 성공: {onto}")
+                    
+                    # 온톨로지 객체 상세 정보
+                    print(f"🔍 온톨로지 객체 상세 정보:")
+                    print(f"  - base_iri: {onto.base_iri}")
+                    print(f"  - name: {onto.name}")
+                    
+                    # owlready2 내부 상태 확인
+                    print(f"🔍 owlready2 내부 상태:")
+                    print(f"  - onto_path: {owlready2.onto_path}")
+                    print(f"  - default_world: {owlready2.default_world}")
+                    
+                    # 파일 읽기 테스트
+                    try:
+                        with open(path_to_try, 'r') as f:
+                            first_line = f.readline().strip()
+                            print(f"📄 파일 첫 줄: {first_line[:100]}...")
+                    except Exception as read_error:
+                        print(f"⚠️ 파일 읽기 테스트 실패: {read_error}")
+                    
+                    # 실제 로딩
+                    print("🔄 실제 로딩 시도 중...")
+                    self._ontology = onto.load()
+                    print(f"✅ 온톨로지 로딩 성공 ({method_name})")
+                    break
+                    
+                except Exception as load_error:
+                    print(f"❌ {method_name} 로딩 실패: {load_error}")
+                    continue
+            
+            # 모든 방법이 실패한 경우
+            if self._ontology is None:
+                print("❌ 모든 로딩 방법 실패")
+                return
             
             print("🔧 추론기 동기화 중...")
             try:
@@ -126,6 +231,8 @@ class OntologyManager:
             
         except FileNotFoundError as e:
             print(f"❌ 온톨로지 파일을 찾을 수 없습니다: {e}")
+            print(f"❌ 현재 작업 디렉토리: {os.getcwd()}")
+            print(f"❌ /tmp 디렉토리 내용: {os.listdir('/tmp') if os.path.exists('/tmp') else '존재하지 않음'}")
             self._ontology = None
             self._namespace = None
         except PermissionError as e:
