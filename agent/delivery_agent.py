@@ -67,16 +67,23 @@ def _fallback_refine(response: str) -> str:
 def load_delivery_policy():
     """배송 정책 파일을 로드합니다."""
     try:
-        # 현재 파일의 디렉토리를 기준으로 경로 설정
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(current_dir)
-        policy_path = os.path.join(project_root, "data", "delivery_policy.txt")
+        import boto3
+        from core.config import config
         
-        with open(policy_path, 'r', encoding='utf-8') as f:
-            return f.read()
-    except FileNotFoundError:
-        print("⚠️ 배송 정책 파일을 찾을 수 없습니다.")
-        return "배송 정책 정보를 불러올 수 없습니다."
+        # S3에서 배송 정책 파일 다운로드 시도
+        try:
+            s3_client = boto3.client('s3', region_name=config.AWS_REGION)
+            response = s3_client.get_object(
+                Bucket=config.S3_BUCKET_NAME,
+                Key='delivery_policy.txt'
+            )
+            content = response['Body'].read().decode('utf-8')
+            print("✅ S3에서 배송 정책 파일 로드 성공")
+            return content
+        except Exception as s3_error:
+            print(f"❌ S3에서 배송 정책 파일 로드 실패: {s3_error}")
+            return "배송 정책 정보를 불러올 수 없습니다."
+                
     except Exception as e:
         print(f"⚠️ 배송 정책 파일 로드 오류: {e}")
         return "배송 정책 정보를 불러올 수 없습니다."

@@ -3,6 +3,7 @@
 온톨로지 로딩, 캐싱, SPARQL 쿼리 등을 중앙화하여 관리
 """
 import os
+import boto3
 from typing import Optional, List, Tuple
 from owlready2 import get_ontology, sync_reasoner, destroy_entity
 from core.config import config
@@ -24,20 +25,53 @@ class OntologyManager:
             self._initialized = True
             self._load_ontology()
     
+    def _download_ontology_from_s3(self) -> bool:
+        """S3에서 온톨로지 파일을 다운로드합니다."""
+        try:
+            if not config.is_s3_ready:
+                print("❌ S3 설정이 준비되지 않았습니다.")
+                return False
+            
+            print(f"📥 S3에서 온톨로지 파일 다운로드 시작: s3://{config.S3_BUCKET_NAME}/{config.ONTOLOGY_S3_KEY}")
+            
+            s3_client = boto3.client('s3', region_name=config.AWS_REGION)
+            
+            # /tmp 디렉토리가 존재하는지 확인하고 생성
+            os.makedirs(os.path.dirname(config.LAMBDA_ONTOLOGY_PATH), exist_ok=True)
+            
+            s3_client.download_file(
+                config.S3_BUCKET_NAME,
+                config.ONTOLOGY_S3_KEY,
+                config.LAMBDA_ONTOLOGY_PATH
+            )
+            
+            # 파일이 정상적으로 다운로드되었는지 확인
+            if os.path.exists(config.LAMBDA_ONTOLOGY_PATH):
+                file_size = os.path.getsize(config.LAMBDA_ONTOLOGY_PATH)
+                print(f"✅ S3에서 온톨로지 파일 다운로드 완료: {config.LAMBDA_ONTOLOGY_PATH} ({file_size:,} bytes)")
+                return True
+            else:
+                print(f"❌ 다운로드된 파일이 존재하지 않습니다: {config.LAMBDA_ONTOLOGY_PATH}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ S3에서 온톨로지 파일 다운로드 실패: {e}")
+            return False
     
     def _load_ontology(self) -> None:
         """온톨로지를 로딩하고 추론기를 동기화합니다."""
         try:
-            # 로컬 파일에서 직접 로딩
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            project_root = os.path.dirname(current_dir)
-            ontology_path = os.path.join(project_root, "data", "ontology.owl")
-            
-            if not os.path.exists(ontology_path):
-                print(f"❌ 로컬 온톨로지 파일을 찾을 수 없습니다: {ontology_path}")
+            # S3에서 온톨로지 파일 다운로드 (Lambda 환경 전용)
+            if not self._download_ontology_from_s3():
+                print("❌ S3에서 온톨로지 파일 다운로드 실패 - Lambda 환경에서는 S3 연결이 필수입니다.")
+                self._ontology = None
+                self._namespace = None
                 return
             
-            print(f"📂 로컬 온톨로지 파일 로딩 중: {ontology_path}")
+            # S3에서 다운로드 성공한 경우
+            ontology_path = config.LAMBDA_ONTOLOGY_PATH
+            
+            print(f"📂 온톨로지 파일 로딩 중: {ontology_path}")
             print(f"📋 파일 크기: {os.path.getsize(ontology_path):,} bytes")
             
             # 파일 존재 및 가독성 재확인
@@ -117,17 +151,16 @@ class OntologyManager:
     def get_schema_text(self) -> str:
         """온톨로지 스키마 텍스트를 반환합니다 (인스턴스 제외)."""
         try:
-            # 로컬 파일에서 직접 로딩
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            project_root = os.path.dirname(current_dir)
-            ontology_path = os.path.join(project_root, "data", "ontology.owl")
+            # Lambda 환경에서 다운로드된 온톨로지 파일 사용
+            ontology_path = config.LAMBDA_ONTOLOGY_PATH
             
             # 파일 존재 확인
             if not os.path.exists(ontology_path):
                 print(f"❌ 스키마 파일이 존재하지 않습니다: {ontology_path}")
+                print("❌ S3에서 온톨로지 파일을 먼저 다운로드해야 합니다.")
                 return ""
             
-            print(f"📂 로컬 스키마 텍스트 로딩: {ontology_path}")
+            print(f"📂 스키마 텍스트 로딩: {ontology_path}")
             with open(ontology_path, "r", encoding="utf-8") as f:
                 lines = []
                 for line in f:
@@ -188,6 +221,7 @@ class OntologyManager:
         print("🔄 온톨로지 재로딩 중...")
         self._ontology = None
         self._namespace = None
+        # S3에서 최신 파일을 다시 다운로드하고 로딩
         self._load_ontology()
         return self.is_loaded()
 

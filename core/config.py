@@ -26,9 +26,12 @@ class Config:
     DSPY_CACHE_DIR = os.getenv('DSPY_CACHE_DIR', '/tmp/dspy_cache')
     
     # S3 설정
-    S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME', '09women-bucket')
+    S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME', 'jogunshop-bucket')
     ONTOLOGY_S3_KEY = os.getenv('ONTOLOGY_S3_KEY', 'ontology.owl')
-    LOCAL_ONTOLOGY_PATH = os.getenv('LOCAL_ONTOLOGY_PATH', '/tmp/ontology.owl')
+    LAMBDA_ONTOLOGY_PATH = '/tmp/ontology.owl'
+    
+    # AWS 설정
+    AWS_REGION = os.getenv('AWS_REGION', 'ap-northeast-2')
     
     @property
     def is_azure_openai_ready(self) -> bool:
@@ -49,6 +52,11 @@ class Config:
     def is_state_machine_ready(self) -> bool:
         """Step Functions 사용 준비 여부 확인"""
         return bool(self.STATE_MACHINE_ARN)
+    
+    @property
+    def is_s3_ready(self) -> bool:
+        """S3 사용 준비 여부 확인"""
+        return bool(self.S3_BUCKET_NAME and self.ONTOLOGY_S3_KEY)
 
 config = Config()
 
@@ -64,5 +72,8 @@ def _print_config_status():
     print(f"[CONFIG] DSPy: {'✓ 사용가능' if config.is_dspy_ready else '✗ 미설정'}")
     print(f"[CONFIG] DSPy 캐시 디렉토리: {config.DSPY_CACHE_DIR}")
     print(f"[CONFIG] Step Functions: {'✓ 사용가능' if config.is_state_machine_ready else '✗ 미설정'}")
+    print(f"[CONFIG] S3: {'✓ 사용가능' if config.is_s3_ready else '✗ 미설정'}")
+    print(f"[CONFIG] S3 버킷: {config.S3_BUCKET_NAME}")
+    print(f"[CONFIG] 온톨로지 S3 키: {config.ONTOLOGY_S3_KEY}")
 
 _print_config_status()

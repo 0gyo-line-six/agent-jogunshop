@@ -159,7 +159,6 @@ def route_request(user_request: str, chat_history: str = None) -> dict:
 if __name__ == "__main__":
     from core.config import config
     
-    # DSPy 설정
     def setup_dspy():
         """DSPy 언어 모델 설정"""
         try:
@@ -198,15 +197,13 @@ if __name__ == "__main__":
     print("🚀 조건샵 에이전트 라우터 테스트")
     print("=" * 50)
     
-    # DSPy 설정
     if not setup_dspy():
         print("❌ DSPy 설정 실패로 테스트를 중단합니다.")
         exit(1)
 
     test_cases = [
         {
-            "name": "완전한 정보 - 상품 문의",
-            "request": "데일리용 기획 2type 카라 반팔티 3XL 가격 얼마인가요?",
+            "request": "기획 2type 카라 반팔티 L사이즈 집업-네이비 옵션 재고 있나요?",
             "messages": [
                 {"personType": "user", "plainText": "안녕하세요!"},
                 {"personType": "user", "plainText": "김철수입니다."},

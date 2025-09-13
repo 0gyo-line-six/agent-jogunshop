@@ -1,45 +1,23 @@
-# 워크플로우의 이름
-name: Deploy Docker Image to AWS Lambda
+name: Deploy to AWS Lambda
 
-# 워크플로우 실행 조건: main 브랜치에 push 이벤트가 발생했을 때
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   workflow_dispatch:
-    inputs:
-      clean_ecr:
-        description: 'ECR 리포지토리 완전 정리 (true/false)'
-        required: false
-        default: false
-        type: boolean
 
-# 실행될 작업(job) 정의
 jobs:
-  build-and-deploy:
-    # 실행 환경 지정
+  deploy:
     runs-on: ubuntu-latest
     
-    # 환경 변수 설정
     env:
       AWS_REGION: ap-northeast-2
       ECR_REPOSITORY: agent-jogunshop
       LAMBDA_FUNCTION_NAME: agent-jogunshop
 
     steps:
-      # 1. 소스 코드 체크아웃
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. QEMU 설치
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      # 3. Docker Buildx 설치
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # 4. AWS 자격 증명 구성
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -47,65 +25,38 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # 5. Amazon ECR에 로그인
-      - name: Log in to Amazon ECR
+      - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 6. ECR의 모든 이미지 정리 (수동 실행 시 옵션)
-      - name: Clean all images in ECR repository (optional)
-        if: github.event.inputs.clean_ecr
+      - name: Create ECR repository if needed
         run: |
-          echo "ECR 리포지토리의 모든 이미지를 정리합니다..."
-          IMAGE_IDS=$(aws ecr list-images --repository-name ${{ env.ECR_REPOSITORY }} --query 'imageIds[*]' --output json)
-          if [ "$IMAGE_IDS" != "[]" ]; then
-            aws ecr batch-delete-image --repository-name ${{ env.ECR_REPOSITORY }} --image-ids "$IMAGE_IDS"
-            echo "이미지 정리 완료."
-          else
-            echo "정리할 이미지가 없습니다."
-          fi
-          
-      # 7. ECR 리포지토리 존재 확인 및 생성
-      - name: Create ECR repository if it does not exist
-        run: |
-          aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} > /dev/null 2>&1 || \
+          aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} 2>/dev/null || \
           aws ecr create-repository --repository-name ${{ env.ECR_REPOSITORY }}
 
-      # 8. Docker 이미지 빌드, 태그, 푸시 (ARM64 아키텍처)
-      - name: Build, tag, and push image to Amazon ECR
-        id: build-image
+      - name: Build and push Docker image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          # ARM64 아키텍처로 Docker 이미지 빌드 및 태깅
-          docker build --no-cache --pull --platform linux/arm64 -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          # 멀티 스테이지 빌드로 이미지 생성
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           
-          # ECR에 이미지 푸시
-          docker push --all-tags $ECR_REGISTRY/$ECR_REPOSITORY
+          # latest 태그도 푸시
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+        id: build-image
 
-      # 9. AWS Lambda 함수 코드 업데이트
-      - name: Update Lambda function code
+      - name: Update Lambda function
         run: |
           aws lambda update-function-code \
             --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
             --image-uri ${{ steps.build-image.outputs.image }}
 
-      # 10. Lambda 함수 설정 업데이트 (수동 실행 시에만)
-      - name: Update Lambda configuration (only on manual run)
-        if: github.event_name == 'workflow_dispatch'
+      - name: Wait for update to complete
         run: |
-          aws lambda update-function-configuration \
-            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
-            --timeout 300 \
-            --memory-size 512 \
-            --architectures arm64
-
-      # 11. 배포 완료 알림
-      - name: Deployment completed
-        run: |
-          echo "배포 완료!"
-          echo "컨테이너 이미지: ${{ steps.build-image.outputs.image }}"
-          echo "Lambda 함수: ${{ env.LAMBDA_FUNCTION_NAME }}"
+          aws lambda wait function-updated-v2 --function-name ${{ env.LAMBDA_FUNCTION_NAME }}
+          echo "✅ Lambda 함수 업데이트 완료: ${{ steps.build-image.outputs.image }}"
