@@ -32,6 +32,11 @@ class OntologyManager:
                 print("❌ S3 설정이 준비되지 않았습니다.")
                 return False
             
+            # 파일이 이미 존재하고 유효한지 확인
+            if os.path.exists(config.LAMBDA_ONTOLOGY_PATH) and os.path.getsize(config.LAMBDA_ONTOLOGY_PATH) > 0:
+                print(f"✅ 기존 온톨로지 파일 사용: {config.LAMBDA_ONTOLOGY_PATH}")
+                return True
+            
             print(f"📥 S3에서 온톨로지 파일 다운로드 시작: s3://{config.S3_BUCKET_NAME}/{config.ONTOLOGY_S3_KEY}")
             
             s3_client = boto3.client('s3', region_name=config.AWS_REGION)
@@ -85,13 +90,36 @@ class OntologyManager:
             
             print(f"📖 온톨로지 파일 읽기 시작: {ontology_path}")
             
-            with open(ontology_path, "rb") as f:
-                print("📊 온톨로지 파일 내용 로딩 중...")
-                self._ontology = get_ontology("http://example.org/ontology.owl").load(fileobj=f)
+            print("📊 온톨로지 파일 내용 로딩 중...")
+            # 절대 경로로 변환하여 file URI 생성
+            abs_path = os.path.abspath(ontology_path)
+            print(f"🔍 절대 경로: {abs_path}")
+            
+            # 로딩 직전 파일 상태 재확인
+            if not os.path.exists(abs_path):
+                print(f"❌ 절대 경로 파일이 존재하지 않음: {abs_path}")
+                return
+            
+            file_size = os.path.getsize(abs_path)
+            print(f"📏 로딩 직전 파일 크기: {file_size:,} bytes")
+            
+            # Lambda 환경을 위한 owlready2 설정
+            import owlready2
+            # Lambda의 /tmp 디렉토리를 owlready2 작업 디렉토리로 설정
+            owlready2.onto_path.append("/tmp")
+            
+            # owlready2는 직접 파일 경로를 사용하는 것이 더 안정적
+            self._ontology = get_ontology(abs_path).load()
             
             print("🔧 추론기 동기화 중...")
-            with self._ontology:
-                sync_reasoner()
+            try:
+                with self._ontology:
+                    # Lambda 환경에서 추론기가 실패할 수 있으므로 try-catch로 감싸기
+                    sync_reasoner()
+                print("✅ 추론기 동기화 완료")
+            except Exception as reasoner_error:
+                print(f"⚠️ 추론기 동기화 실패 (Lambda 환경에서는 정상적 현상일 수 있음): {reasoner_error}")
+                # 추론기 실패해도 온톨로지 자체는 사용 가능하므로 계속 진행
             
             self._namespace = self._get_namespace()
             print("✅ 온톨로지 로딩 완료")
@@ -133,6 +161,9 @@ class OntologyManager:
     
     def is_loaded(self) -> bool:
         """온톨로지가 성공적으로 로딩되었는지 확인합니다."""
+        if self._ontology is None:
+            print("🔄 온톨로지가 로딩되지 않음 - 재시도 중...")
+            self._load_ontology()
         return self._ontology is not None
     
     def execute_sparql(self, query: str) -> List[Tuple]:
@@ -191,7 +222,6 @@ class OntologyManager:
             print("✅ 온톨로지 인스턴스 제거 완료")
         except Exception as e:
             print(f"❌ 인스턴스 제거 실패: {e}")
-    
     
     def get_all_products(self) -> List[str]:
         """모든 상품명을 반환합니다."""
