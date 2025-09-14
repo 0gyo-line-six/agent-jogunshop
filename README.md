@@ -56,7 +56,7 @@ DSPY_CACHE_DIR=/tmp/dspy_cache
 
 ### 1. 기존 빌드 완전 정리 (권장)
 ```bash
-# ECR의 모든 이미지 삭제 (초기화)
+# ECR의 모든 이미지 삭제
 aws ecr list-images --repository-name agent-jogunshop --query 'imageIds[*]' --output json | \
 jq -r '.[] | "imageDigest=" + .imageDigest' | \
 xargs -I {} aws ecr batch-delete-image --repository-name agent-jogunshop --image-ids {} 2>/dev/null || true
@@ -74,20 +74,14 @@ docker builder prune -af
 
 ### 2. Docker 이미지 빌드
 ```bash
-# buildx 비활성화로 단일 아키텍처 이미지 강제 생성
 export DOCKER_BUILDKIT=0
 docker build --pull --no-cache -t agent-jogunshop .
-
-# 빌드된 이미지 아키텍처 확인
 docker image inspect agent-jogunshop:latest --format '{{.Architecture}}'
 ```
 
 ### 3. ECR에 이미지 푸시
 ```bash
-# ECR 로그인
 aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.ap-northeast-2.amazonaws.com
-
-# 고유한 태그로 이미지 푸시 (Image Manifest 충돌 방지)
 IMAGE_TAG="v$(date +%Y%m%d-%H%M%S)"
 docker tag agent-jogunshop:latest $ACCOUNT_ID.dkr.ecr.ap-northeast-2.amazonaws.com/agent-jogunshop:$IMAGE_TAG
 docker push $ACCOUNT_ID.dkr.ecr.ap-northeast-2.amazonaws.com/agent-jogunshop:$IMAGE_TAG
@@ -95,7 +89,6 @@ docker push $ACCOUNT_ID.dkr.ecr.ap-northeast-2.amazonaws.com/agent-jogunshop:$IM
 
 ### 4. Lambda 함수 업데이트
 ```bash
-# 함수가 있는 경우
 FULL_IMAGE_URI="$ACCOUNT_ID.dkr.ecr.ap-northeast-2.amazonaws.com/agent-jogunshop:$IMAGE_TAG"
 aws lambda update-function-code \
   --function-name agent-jogunshop \
