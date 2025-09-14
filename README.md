@@ -72,7 +72,7 @@ docker system prune -af
 docker builder prune -af
 ```
 
-### 2. Docker 이미지 빌드 (Image Manifest 문제 방지)
+### 2. Docker 이미지 빌드
 ```bash
 # buildx 비활성화로 단일 아키텍처 이미지 강제 생성
 export DOCKER_BUILDKIT=0
@@ -82,13 +82,10 @@ docker build --pull --no-cache -t agent-jogunshop .
 docker image inspect agent-jogunshop:latest --format '{{.Architecture}}'
 ```
 
-### 3. ECR에 이미지 푸시 (안정적인 방법)
+### 3. ECR에 이미지 푸시
 ```bash
 # ECR 로그인
 aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.ap-northeast-2.amazonaws.com
-
-# 리포지토리 생성 (처음만)
-aws ecr create-repository --repository-name agent-jogunshop --region ap-northeast-2 2>/dev/null || true
 
 # 고유한 태그로 이미지 푸시 (Image Manifest 충돌 방지)
 IMAGE_TAG="v$(date +%Y%m%d-%H%M%S)"
@@ -96,20 +93,8 @@ docker tag agent-jogunshop:latest $ACCOUNT_ID.dkr.ecr.ap-northeast-2.amazonaws.c
 docker push $ACCOUNT_ID.dkr.ecr.ap-northeast-2.amazonaws.com/agent-jogunshop:$IMAGE_TAG
 ```
 
-### 4. Lambda 함수 생성/업데이트
+### 4. Lambda 함수 업데이트
 ```bash
-
-# 함수가 없는 경우
-FULL_IMAGE_URI="$ACCOUNT_ID.dkr.ecr.ap-northeast-2.amazonaws.com/agent-jogunshop:$IMAGE_TAG"
-aws lambda create-function \
-  --function-name agent-jogunshop \
-  --package-type Image \
-  --code ImageUri=$FULL_IMAGE_URI \
-  --role arn:aws:iam::$ACCOUNT_ID:role/lambda-execution-role \
-  --timeout 900 \
-  --memory-size 1024 \
-  --architectures arm64 2>/dev/null || echo "함수가 이미 존재합니다."
-
 # 함수가 있는 경우
 FULL_IMAGE_URI="$ACCOUNT_ID.dkr.ecr.ap-northeast-2.amazonaws.com/agent-jogunshop:$IMAGE_TAG"
 aws lambda update-function-code \

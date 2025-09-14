@@ -118,40 +118,49 @@ class OntologyManager:
             # Lambda 환경 최적화 설정
             print("🔧 Lambda 환경 최적화 설정 중...")
             
+            # owlready2 완전 초기화
+            try:
+                owlready2.default_world.close()
+                print("🔄 owlready2 world 닫기 완료")
+            except:
+                pass
+            
             # onto_path 설정
             print(f"🗂️ 기본 onto_path: {owlready2.onto_path}")
             owlready2.onto_path.clear()
             owlready2.onto_path.append("/tmp")
             print(f"📁 onto_path 설정: {owlready2.onto_path}")
             
+            # tempfile 설정
+            tempfile.tempdir = "/tmp"
+            
             # owlready2 백엔드를 메모리 모드로 설정
             try:
+                # 새로운 world 생성
+                owlready2.default_world = owlready2.World()
                 owlready2.default_world.set_backend(filename=":memory:")
                 print("💾 owlready2 백엔드를 메모리 모드로 설정")
             except Exception as e:
                 print(f"⚠️ 메모리 백엔드 설정 실패: {e}")
+                # 메모리 백엔드 실패 시 /tmp에 SQLite 파일 생성
+                try:
+                    sqlite_path = "/tmp/ontology.db"
+                    owlready2.default_world.set_backend(filename=sqlite_path)
+                    print(f"💾 SQLite 백엔드 설정: {sqlite_path}")
+                except Exception as e2:
+                    print(f"⚠️ SQLite 백엔드 설정도 실패: {e2}")
             
-            # tempfile 설정
-            tempfile.tempdir = "/tmp"
+            # 환경 변수 설정
+            import os
+            os.environ['OWLREADY2_TMP'] = '/tmp'
+            os.environ['TMPDIR'] = '/tmp'
+            os.environ['TMP'] = '/tmp'
+            os.environ['TEMP'] = '/tmp'
             
             # /tmp 디렉토리 여유 공간 확인
             import shutil
             free_space = shutil.disk_usage("/tmp").free
             print(f"💽 /tmp 디렉토리 여유 공간: {free_space / (1024*1024):.1f} MB")
-            
-            # 파일을 /tmp에 복사하여 권한 문제 해결
-            import shutil
-            copied_path = "/tmp/ontology_copy.owl"
-            try:
-                shutil.copy2(abs_path, copied_path)
-                print(f"📋 파일 복사 완료: {copied_path}")
-            except Exception as e:
-                print(f"⚠️ 파일 복사 실패: {e}")
-                copied_path = abs_path
-            
-            # file:// URI 형식으로 시도
-            file_uri = f"file://{abs_path}"
-            print(f"🌐 file URI: {file_uri}")
             
             # 파일 상태 상세 정보
             import stat
@@ -162,11 +171,8 @@ class OntologyManager:
             print(f"  - 수정 시간: {file_stat.st_mtime}")
             print(f"  - 접근 시간: {file_stat.st_atime}")
             
-            # 여러 방식으로 로딩 시도
+            # 상대 경로로만 로딩 시도
             loading_methods = [
-                ("복사된 파일", copied_path),
-                ("직접 경로", abs_path),
-                ("file URI", file_uri),
                 ("상대 경로", ontology_path)
             ]
             
@@ -188,11 +194,6 @@ class OntologyManager:
                     print(f"  - base_iri: {onto.base_iri}")
                     print(f"  - name: {onto.name}")
                     
-                    # owlready2 내부 상태 확인
-                    print(f"🔍 owlready2 내부 상태:")
-                    print(f"  - onto_path: {owlready2.onto_path}")
-                    print(f"  - default_world: {owlready2.default_world}")
-                    
                     # 파일 읽기 테스트
                     try:
                         with open(path_to_try, 'r') as f:
@@ -201,11 +202,65 @@ class OntologyManager:
                     except Exception as read_error:
                         print(f"⚠️ 파일 읽기 테스트 실패: {read_error}")
                     
-                    # 실제 로딩
+                    # 실제 로딩 - 여러 방법 시도
                     print("🔄 실제 로딩 시도 중...")
-                    self._ontology = onto.load()
-                    print(f"✅ 온톨로지 로딩 성공 ({method_name})")
-                    break
+                    
+                    # 방법 1: 기본 load() 시도
+                    try:
+                        self._ontology = onto.load()
+                        print(f"✅ 온톨로지 로딩 성공 ({method_name}) - 기본 방법")
+                        break
+                    except Exception as load_detail_error:
+                        print(f"❌ 기본 onto.load() 실패: {load_detail_error}")
+                        
+                        # 방법 2: reload=True 옵션으로 시도
+                        try:
+                            print("🔄 reload=True 옵션으로 재시도...")
+                            self._ontology = onto.load(reload=True)
+                            print(f"✅ 온톨로지 로딩 성공 ({method_name}) - reload=True")
+                            break
+                        except Exception as reload_error:
+                            print(f"❌ reload=True 방법도 실패: {reload_error}")
+                            
+                            # 방법 3: 파일을 직접 읽어서 로딩
+                            try:
+                                print("🔄 파일 직접 읽기 방법으로 시도...")
+                                with open(path_to_try, 'rb') as f:
+                                    content = f.read()
+                                print(f"📄 파일 내용 읽기 완료: {len(content)} bytes")
+                                
+                                # 임시 파일로 저장 후 로딩
+                                temp_file = "/tmp/temp_ontology.owl"
+                                with open(temp_file, 'wb') as f:
+                                    f.write(content)
+                                
+                                temp_onto = get_ontology(temp_file)
+                                self._ontology = temp_onto.load()
+                                print(f"✅ 온톨로지 로딩 성공 ({method_name}) - 임시 파일 방법")
+                                break
+                                
+                            except Exception as temp_error:
+                                print(f"❌ 임시 파일 방법도 실패: {temp_error}")
+                                
+                                # 모든 방법 실패 시 상세 오류 출력
+                                print(f"❌ 모든 로딩 방법 실패!")
+                                print(f"❌ 오류 타입: {type(load_detail_error).__name__}")
+                                import traceback
+                                print(f"❌ 상세 스택 트레이스: {traceback.format_exc()}")
+                                
+                                # owlready2 내부 상태 재확인
+                                print(f"🔍 로딩 실패 시 owlready2 상태:")
+                                print(f"  - onto_path: {owlready2.onto_path}")
+                                print(f"  - default_world: {owlready2.default_world}")
+                                print(f"  - onto.base_iri: {onto.base_iri}")
+                                
+                                # 파일 시스템 상태 확인
+                                print(f"🔍 파일 시스템 상태:")
+                                print(f"  - 파일 존재: {os.path.exists(path_to_try)}")
+                                print(f"  - 파일 크기: {os.path.getsize(path_to_try) if os.path.exists(path_to_try) else 'N/A'}")
+                                print(f"  - 읽기 권한: {os.access(path_to_try, os.R_OK) if os.path.exists(path_to_try) else 'N/A'}")
+                                
+                                raise load_detail_error
                     
                 except Exception as load_error:
                     print(f"❌ {method_name} 로딩 실패: {load_error}")
