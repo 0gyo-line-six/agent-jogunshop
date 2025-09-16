@@ -75,7 +75,7 @@ def load_delivery_policy():
             s3_client = boto3.client('s3', region_name=config.AWS_REGION)
             response = s3_client.get_object(
                 Bucket=config.S3_BUCKET_NAME,
-                Key='delivery_policy.txt'
+                Key='policy.txt'
             )
             content = response['Body'].read().decode('utf-8')
             print("✅ S3에서 배송 정책 파일 로드 성공")

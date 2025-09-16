@@ -1,6 +1,5 @@
 import dspy
-import re
-from typing import Dict, List, Optional
+from typing import Dict, List
 from agent.product_agent import run_product_agent
 from agent.delivery_agent import run_delivery_agent
 from agent.general_agent import run_general_agent
@@ -53,11 +52,11 @@ def validate_required_info(user_info: Dict[str, str]) -> List[str]:
 def generate_info_request_message(missing_info: List[str]) -> str:
     """누락된 정보 요청 메시지를 생성합니다."""
     if len(missing_info) == 1:
-        return f"안녕하세요 고객님~ 원활한 상담을 위해 {missing_info[0]} 말씀 부탁드립니다."
+        return f'안녕하세요 고객님~\n원활한 상담을 위해 {missing_info[0]} 말씀 부탁드립니다.'
     elif len(missing_info) == 2:
-        return f"안녕하세요 고객님~ 원활한 상담을 위해 {missing_info[0]}, {missing_info[1]} 말씀 부탁드립니다."
+        return f'안녕하세요 고객님~\n원활한 상담을 위해 {missing_info[0]}, {missing_info[1]} 말씀 부탁드립니다.'
     else:
-        return f"안녕하세요 고객님~ 원활한 상담을 위해 구매자명, 연락처, 문의내용 말씀 부탁드립니다."
+        return f'안녕하세요 고객님~\n원활한 상담을 위해 구매자명, 연락처, 문의내용 말씀 부탁드립니다.'
 
 def classify_user_request(user_request: str) -> tuple[str, str]:
     """사용자 요청을 분류하여 카테고리와 근거를 반환합니다."""
@@ -83,7 +82,8 @@ def route_request(user_request: str, chat_history: str = None) -> dict:
                     'agent_used': 'info_validator',
                     'success': True,
                     'missing_info': missing_info,
-                    'extracted_info': user_info
+                    'extracted_info': user_info,
+                    'tags': ['정보요청', '필수정보누락']
                 }
             else:
                 print("✅ 모든 필수 정보가 확인되었습니다.")
@@ -99,16 +99,17 @@ def route_request(user_request: str, chat_history: str = None) -> dict:
             'user_request': user_request,
             'response': None,
             'agent_used': None,
-            'success': False
+            'success': False,
+            'tags': []
         }
         
-        # 사용자 정보가 있으면 결과에 포함
         if chat_history:
             result['user_info'] = user_info
         
         if category == 'product':
             print("🛍️ 상품 에이전트로 전달...")
             result['agent_used'] = 'product_agent'
+            result['tags'] = ['상품문의']
             agent_result = run_product_agent(user_request)
             if agent_result:
                 result['response'] = getattr(agent_result, 'query_result', '상품 정보 조회를 완료했습니다.')
@@ -118,6 +119,7 @@ def route_request(user_request: str, chat_history: str = None) -> dict:
         elif category == 'delivery':
             print("🚚 배송 에이전트로 전달...")
             result['agent_used'] = 'delivery_agent'
+            result['tags'] = ['배송문의']
             agent_result = run_delivery_agent(user_request)
             if agent_result:
                 result['response'] = getattr(agent_result, 'delivery_result', '배송 정보 조회를 완료했습니다.')
@@ -127,6 +129,7 @@ def route_request(user_request: str, chat_history: str = None) -> dict:
         elif category == 'general':
             print("💬 일반 에이전트로 전달...")
             result['agent_used'] = 'general_agent'
+            result['tags'] = ['일반문의']
             agent_result = run_general_agent(user_request)
             if agent_result:
                 result['response'] = getattr(agent_result, 'general_result', '일반 문의 처리를 완료했습니다.')
@@ -136,6 +139,7 @@ def route_request(user_request: str, chat_history: str = None) -> dict:
         else:
             print("❓ 알 수 없는 카테고리...")
             result['agent_used'] = 'general_agent'
+            result['tags'] = ['상담원 전환']
             agent_result = run_general_agent(user_request)
             if agent_result:
                 result['response'] = getattr(agent_result, 'general_result', '문의 처리를 완료했습니다.')
@@ -153,7 +157,8 @@ def route_request(user_request: str, chat_history: str = None) -> dict:
             'user_request': user_request,
             'response': "죄송합니다. 요청 처리 중 오류가 발생했습니다. 다시 시도해주세요.",
             'agent_used': 'error_handler',
-            'success': False
+            'success': False,
+            'tags': ['상담원 전환']
         }
 
 if __name__ == "__main__":
@@ -194,8 +199,8 @@ if __name__ == "__main__":
         
         return "\n".join(history_lines)
 
-    print("🚀 조건샵 에이전트 라우터 테스트")
-    print("=" * 50)
+    print("🚀 조군샵 에이전트 테스트")
+    print("=" * 100)
     
     if not setup_dspy():
         print("❌ DSPy 설정 실패로 테스트를 중단합니다.")
@@ -203,7 +208,7 @@ if __name__ == "__main__":
 
     test_cases = [
         {
-            "request": "기획 2type 카라 반팔티 L사이즈 집업-네이비 옵션 재고 있나요?",
+            "request": "배송비 얼마인가요?",
             "messages": [
                 {"personType": "user", "plainText": "안녕하세요!"},
                 {"personType": "user", "plainText": "김철수입니다."},
@@ -217,10 +222,10 @@ if __name__ == "__main__":
         full_chat_history = f"{chat_history}\n고객: {test_case['request']}" if chat_history else f"고객: {test_case['request']}"
         
         print(f"📱 채팅 기록:\n{full_chat_history}")
-        print("-" * 40)
+        print("=" * 100)
         
         try:
             result = route_request(test_case['request'], full_chat_history)
-            print(f"🎯 응답: {result['response']}")
+            print(f"🎯 응답:\n{result['response']}")
         except Exception as e:
             print(f"❌ 테스트 실행 중 오류: {e}")

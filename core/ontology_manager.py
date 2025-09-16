@@ -6,7 +6,7 @@ import os
 import boto3
 from io import BytesIO
 from typing import Optional, List, Tuple
-from owlready2 import get_ontology, sync_reasoner, destroy_entity
+from owlready2 import get_ontology, sync_reasoner
 from core.config import config
 
 class OntologyManager:
@@ -80,7 +80,6 @@ class OntologyManager:
             print(f"📏 파일 크기: {size} bytes")
 
             import owlready2
-            # Lambda에서는 반드시 /tmp만 사용
             owlready2.onto_path.clear()
             owlready2.onto_path.append("/tmp")
 
@@ -93,7 +92,6 @@ class OntologyManager:
                 owlready2.default_world.set_backend(filename=sqlite_path)
                 print(f"💾 owlready2 백엔드: SQLite({sqlite_path})")
 
-            # ✅ BytesIO 기반 로딩
             with open(abs_path, "rb") as f:
                 content = f.read()
 
@@ -103,9 +101,7 @@ class OntologyManager:
             print("✅ 온톨로지 로딩 성공")
             self._ontology = onto
             self._namespace = getattr(onto, "base_iri", "http://example.org/product-inquiry#")
-            print(f"🔄 namespace: {self._namespace}")
 
-            # 추론기는 옵션 실행
             if run_reasoner:
                 try:
                     with onto:

@@ -194,7 +194,7 @@ class ChatService:
         if not self.chat_id:
             raise ValueError("chat_id는 필수입니다")
     
-    def generate_reply(self, last_message: str) -> str:
+    def generate_reply(self, last_message: str) -> Tuple[str, Optional[List[str]]]:
         log(self.request_id, "WEBHOOK", f"AI 응답 생성 시작: '{last_message}'")
         start_time = time.time()
         try:
@@ -217,10 +217,14 @@ class ChatService:
             result = route_request(last_message, full_chat_history)
             end_time = time.time()
             log(self.request_id, "WEBHOOK", f"AI 응답 생성 완료: '{last_message}' ({end_time - start_time:.1f}초)")
-            return result.get('response', '보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리게습니다.')
+            
+            tags = result.get('tags')
+            response = result.get('response', '보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다.')
+            
+            return response, tags
         except Exception as e:
             log(self.request_id, "ERROR", f"응답 생성 중 오류: {e}")
-            return "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리게습니다."
+            return "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다.", None
 
     def fetch_history(self, limit: int = 200) -> List[Dict]:
         url = f"{config.CHANNEL_API_BASE_URL}/user-chats/{self.chat_id}/messages"
@@ -236,26 +240,29 @@ class ChatService:
             log(self.request_id, "ERROR", f"채팅 히스토리 조회 실패: {e}")
             return []
 
-    def send_reply(self, message: str) -> Tuple[Dict[str, str], int]:
+    def send_reply(self, message: str, tags: Optional[List[str]] = None) -> Tuple[Dict[str, str], int]:
         log(self.request_id, "WEBHOOK", f"메시지 전송 시작: '{message}'")
         start_time = time.time()
         if not config.is_channel_api_ready:
-            return {"status": "OK", "message": "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리게습니다."}, 200
+            return {"status": "OK", "message": "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."}, 200
         url = f"{config.CHANNEL_API_BASE_URL}/user-chats/{self.chat_id}/messages"
         headers = { "accept": "application/json", "Content-Type": "application/json", "x-access-key": config.CHANNEL_ACCESS_KEY, "x-access-secret": config.CHANNEL_ACCESS_SECRET }
         payload = {"blocks": [{"type": "text", "value": message}]}
+        
+        if tags:
+            payload["tags"] = tags
         try:
             response = requests.post(url, headers=headers, json=payload, timeout=10)
             if response.status_code == 200:
                 end_time = time.time()
                 log(self.request_id, "WEBHOOK", f"메시지 전송 성공: '{message}' ({end_time - start_time:.1f}초)")
-                return {"status": "OK", "message": "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리게습니다."}, 200
+                return {"status": "OK", "message": "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."}, 200
             else:
                 log(self.request_id, "ERROR", f"메시지 전송 실패: {response.status_code} {response.text}")
-                return {"status": "ERROR", "message": "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리게습니다."}, 200
+                return {"status": "ERROR", "message": "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."}, 200
         except requests.RequestException as e:
             log(self.request_id, "ERROR", f"메시지 전송 중 네트워크 오류: {e}")
-            return {"status": "ERROR", "message": "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리게습니다."}, 200
+            return {"status": "ERROR", "message": "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."}, 200
 
 class WebhookHandler:
     """새로운 웹훅 메시지 수신 처리"""
@@ -268,12 +275,12 @@ class WebhookHandler:
         """새로운 메시지를 수신하고 후속 처리"""
         parse_result = self.parser.parse(self.payload)
         if not parse_result.is_valid:
-            return {"status": "OK", "message": "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리게습니다."}, 200
+            return {"status": "OK", "message": "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."}, 200
         
         if self.orchestrator.orchestrate_processing(parse_result.chat_id, parse_result.message):
-            return {"status": "OK", "message": "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리게습니다."}, 200
+            return {"status": "OK", "message": "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."}, 200
         else:
-            return {"status": "ERROR", "message": "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리게습니다."}, 500
+            return {"status": "ERROR", "message": "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."}, 500
 
 class ScheduledChatProcessor:
     """스케줄된 작업 처리"""
@@ -288,16 +295,16 @@ class ScheduledChatProcessor:
         last_message = self.repository.get_and_clear_state(chat_id)
         if not last_message:
             log(self.request_id, "INFO", "처리할 메시지가 없음 (이미 다른 프로세스에서 처리됨)")
-            return {"status": "OK", "message": "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리게습니다."}, 200
+            return {"status": "OK", "message": "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."}, 200
 
         chat_service = ChatService(chat_id, self.request_id)
-        reply_message = chat_service.generate_reply(last_message)
+        reply_message, tags = chat_service.generate_reply(last_message)
         
         if reply_message:
-            return chat_service.send_reply(reply_message)
+            return chat_service.send_reply(reply_message, tags)
         else:
             log(self.request_id, "ERROR", "생성된 응답 없음")
-            return {"status": "OK", "message": "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리게습니다."}, 200
+            return {"status": "OK", "message": "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."}, 200
 
 def webhook_main_handler(event: Dict[str, Any], request_id: str) -> Tuple[Dict, int]:
     """Lambda의 메인 핸들러 - 이벤트에 따라 적합한 핸들러로 분기"""

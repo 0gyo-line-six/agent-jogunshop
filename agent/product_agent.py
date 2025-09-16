@@ -3,69 +3,46 @@ import json
 import dspy
 from core.ontology_manager import get_ontology_manager
 
-class ResponseStyleConverter(dspy.Signature):
-    """상품 정보 응답을 상담원처럼 자연스럽게 변환하는 도우미입니다.
+# class ResponseStyleConverter(dspy.Signature):
+#     """상품 정보 응답을 상담원처럼 자연스럽게 변환하는 도우미입니다.
     
-    원본 응답을 받아서 상담원이 고객에게 말하는 것처럼 자연스럽고 친절한 톤으로 변환합니다.
+#     원본 응답을 받아서 상담원이 고객에게 말하는 것처럼 자연스럽고 친절한 톤으로 변환합니다.
     
-    변환 예시:
-    - "'티셔츠' 상품의 색상 옵션: 블랙, 화이트" → "문의해주신 상품은 블랙, 화이트 색상 있습니다"
-    - "'청바지' 상품의 가격: 25000원" → "문의해주신 상품은 가격 25,000원입니다"
-    - "사이즈 정보를 찾을 수 없습니다" → "해당 상품은 사이즈 정보가 없는 상품입니다"
+#     변환 예시:
+#     - "'티셔츠' 상품의 색상 옵션: 블랙, 화이트" → "문의해주신 상품은 블랙, 화이트 색상 있습니다"
+#     - "'청바지' 상품의 가격: 25000원" → "문의해주신 상품의 가격은 25,000원입니다"
     
-    주의사항:
-    - 과도한 인사말이나 추가 질문 유도는 제거
-    - 간결하면서도 친절한 상담원 톤 유지
-    - 가격은 천 단위 쉼표 포함
-    """
+#     주의사항:
+#     - 과도한 인사말이나 추가 질문 유도는 제거
+#     - 간결하면서도 친절한 상담원 톤 유지
+#     - 가격은 천 단위 쉼표 포함
+#     """
     
-    original_response: str = dspy.InputField(desc="원본 상품 정보 응답")
-    counselor_response: str = dspy.OutputField(desc="상담원처럼 자연스럽게 변환된 응답")
+#     original_response: str = dspy.InputField(desc="원본 상품 정보 응답")
+#     counselor_response: str = dspy.OutputField(desc="상담원처럼 자연스럽게 변환된 응답")
 
-response_converter = dspy.ChainOfThought(ResponseStyleConverter)
+# response_converter = dspy.ChainOfThought(ResponseStyleConverter)
 
-def make_response_like_counselor(response: str) -> str:
-    """
-    DSPy를 사용하여 상품 에이전트의 응답을 상담원처럼 자연스럽게 조정합니다.
+# def make_response_style(response: str) -> str:
+#     """
+#     DSPy를 사용하여 상품 에이전트의 응답 톤앤매너를 조정합니다.
     
-    Args:
-        response (str): 원본 응답 텍스트
+#     Args:
+#         response (str): 원본 응답 텍스트
         
-    Returns:
-        str: 상담원처럼 자연스럽게 조정된 응답 텍스트
-    """
-    if not response or not isinstance(response, str):
-        return response
+#     Returns:
+#         str: 자연스럽게 조정된 응답 텍스트
+#     """
+#     if not response or not isinstance(response, str):
+#         return response
     
-    try:
-        prediction = response_converter(original_response=response)
-        converted_response = getattr(prediction, 'counselor_response', response)
-        return converted_response.strip()
-    except Exception as e:
-        print(f"⚠️ 응답 변환 중 오류: {e}")
-        # 오류 시 기본 규칙 기반 변환 사용
-        return _fallback_conversion(response)
-
-def _fallback_conversion(response: str) -> str:
-    """DSPy 실패 시 사용할 기본 변환 로직"""
-    simple_adjustments = [
-        ("상품의 색상 옵션:", "문의해주신 상품은"),
-        ("상품의 사이즈 옵션:", "문의해주신 상품은"),
-        ("상품의 가격:", "문의해주신 상품은 가격"),
-        ("'", ""),
-        ("을 찾을 수 없습니다", " 정보가 없는 상품입니다"),
-    ]
-    
-    result = response
-    for old, new in simple_adjustments:
-        result = result.replace(old, new)
-    
-    if "원" in result and not result.endswith("입니다"):
-        result += "입니다"
-    elif not result.endswith("."):
-        result += "."
-        
-    return result.strip()
+#     try:
+#         prediction = response_converter(original_response=response)
+#         converted_response = getattr(prediction, 'counselor_response', response)
+#         return converted_response.strip()
+#     except Exception as e:
+#         print(f"⚠️ 응답 변환 중 오류: {e}")
+#         return "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."
 
 def find_product_colors(product_name: str) -> str:
     """특정 상품의 모든 색상 옵션을 찾아 반환합니다."""
@@ -103,10 +80,12 @@ def find_product_colors(product_name: str) -> str:
             return f"'{product_name}' 상품의 색상 정보를 찾을 수 없습니다."
         
         result = f"'{product_name}' 상품의 색상 옵션: {', '.join(sorted(colors))}"
-        return make_response_like_counselor(result)
+        # return make_response_style(result)
+        return result
     except Exception as e:
         result = f"색상 검색 중 오류 발생: {e}"
-        return make_response_like_counselor(result)
+        # return make_response_style(result)
+        return result
 
 def find_product_sizes(product_name: str) -> str:
     """특정 상품의 모든 사이즈 옵션을 찾아 반환합니다."""
@@ -144,10 +123,12 @@ def find_product_sizes(product_name: str) -> str:
             return f"'{product_name}' 상품의 사이즈 정보를 찾을 수 없습니다."
         
         result = f"'{product_name}' 상품의 사이즈 옵션: {', '.join(sorted(sizes))}"
-        return make_response_like_counselor(result)
+        # return make_response_style(result)
+        return result
     except Exception as e:
         result = f"사이즈 검색 중 오류 발생: {e}"
-        return make_response_like_counselor(result)
+        # return make_response_style(result)
+        return result
 
 def find_product_price(product_name: str) -> str:
     """특정 상품의 가격 정보를 찾아 반환합니다."""
@@ -171,10 +152,12 @@ def find_product_price(product_name: str) -> str:
             return f"'{product_name}' 상품의 가격 정보를 찾을 수 없습니다."
         price = int(results[0][0])
         result = f"'{product_name}' 상품의 가격: {price:,}원"
-        return make_response_like_counselor(result)
+        # return make_response_style(result)
+        return result
     except Exception as e:
         result = f"가격 검색 중 오류 발생: {e}"
-        return make_response_like_counselor(result)
+        # return make_response_style(result)
+        return result
 
 def find_product_types(product_name: str) -> str:
     """특정 상품의 모든 타입 옵션을 찾아 반환합니다."""
@@ -369,33 +352,6 @@ def find_variant_prices(product_name: str) -> str:
     except Exception as e:
         return f"옵션별 가격 검색 중 오류 발생: {e}"
 
-def search_products_by_keyword(keyword: str) -> str:
-    """키워드로 상품을 검색합니다."""
-    ontology_manager = get_ontology_manager()
-    if not ontology_manager.is_loaded() or not keyword:
-        return "온톨로지 로딩 실패 또는 키워드 없음"
-    
-    try:
-        Product = getattr(ontology_manager.ontology, "Product", None)
-        if Product is None:
-            return "Product 클래스를 찾을 수 없습니다."
-        
-        matching_products = []
-        for prod in list(Product.instances()):
-            try:
-                pname = str(prod.productName[0]) if getattr(prod, "productName", []) else ""
-                if keyword.lower() in pname.lower():
-                    matching_products.append(pname)
-            except Exception:
-                continue
-        
-        if not matching_products:
-            return f"'{keyword}' 키워드와 일치하는 상품을 찾을 수 없습니다."
-        
-        return f"'{keyword}' 검색 결과: {', '.join(matching_products)}"
-    except Exception as e:
-        return f"상품 검색 중 오류 발생: {e}"
-
 def find_product_by_partial_name(partial_name: str) -> str:
     """부분 상품명으로 정확한 상품을 찾아 반환합니다."""
     ontology_manager = get_ontology_manager()
@@ -478,85 +434,40 @@ def find_product_by_partial_name(partial_name: str) -> str:
     except Exception as e:
         return f"상품 검색 중 오류 발생: {e}"
 
-def check_unsupported_request(user_request: str) -> str:
-    """
-    현재 지원하지 않는 기능에 대한 요청인지 LLM이 판단하여 예외 처리
-    
+class UnsupportedRequestClassifier(dspy.Signature):
+    """사용자 요청이 지원 가능한 범위인지 아닌지를 분류하는 도우미입니다.
+
     지원하는 기능:
-    - 상품의 색상, 사이즈, 타입 옵션 조회
+    - 상품 색상, 사이즈, 타입 옵션 조회
     - 상품 가격, 재고, 판매 상태 조회
     - 옵션별 가격 정보 조회
     - 상품 검색 및 부분 상품명으로 상품 찾기
-    
+
     지원하지 않는 기능:
     - 사이즈 추천, 상품 추천
-    - 상품 간 비교, 순위
-    - 주문, 구매, 결제 관련
-    - 배송, 환불, 교환 등 고객 서비스
+    - 상품 비교, 순위
+    - 주문, 구매, 결제
+    - 배송, 환불, 교환
     - 리뷰, 평점, 후기
-    - 사진, 이미지 관련
+    - 사진/이미지 관련
     - 회원 관리, 로그인 등
     """
-    
-    # 명확히 지원하지 않는 요청들을 판단
-    unsupported_patterns = [
-        # 추천 관련
-        '추천', '추천해', '어떤 게', '뭐가 좋', '골라', '선택해',
-        
-        # 비교 관련  
-        '비교', '차이', '다른점', '어떤 것이 더', 'vs', '대신',
-        
-        # 사이즈 추천
-        '사이즈 추천', '몇 사이즈', '어떤 사이즈', '사이즈 골라',
-        
-        # 주문/구매 관련
-        '주문', '구매', '사고 싶', '장바구니', '결제', '카드',
-        
-        # 배송/고객서비스
-        '배송', '언제 와', '환불', '교환', '반품', '취소',
-        
-        # 리뷰/평가
-        '리뷰', '평점', '후기', '어때', '좋아',
-        
-        # 이미지/사진
-        '사진', '이미지', '모델', '착용샷', '코디',
-        
-        # 회원/계정
-        '회원', '가입', '로그인', '비밀번호',
-        
-        # 기타 서비스
-        '고객센터', '문의', '전화', '상담',
-        
-        # 일반 대화
-        '안녕', '하이', '반가워', '고마워', '감사'
-    ]
-    
-    request_lower = user_request.lower().strip()
-    
-    # 요청이 너무 짧은 경우
-    if len(request_lower) < 3:
-        return "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리게습니다."
-    
-    # 지원하지 않는 패턴이 포함된 경우
-    for pattern in unsupported_patterns:
-        if pattern in request_lower:
-            return "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리게습니다."
-    
-    # 지원하는 기능 키워드 확인
-    supported_keywords = [
-        '색상', '컬러', '사이즈', '크기', '타입', '종류',
-        '가격', '얼마', '재고', '품절', '판매', '상태',
-        '옵션', '정보', '찾아', '검색', '상품', '제품'
-    ]
-    
-    has_supported_keyword = any(keyword in request_lower for keyword in supported_keywords)
-    
-    # 지원하는 키워드가 없으면 예외 처리
-    if not has_supported_keyword:
-        return "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리게습니다."
-    
-    # 정상적인 지원 가능한 요청으로 판단되는 경우 None 반환 (다른 도구들이 처리)
-    return None
+    user_request: str = dspy.InputField()
+    classification: str = dspy.OutputField(desc="'supported' 또는 'unsupported'")
+
+unsupported_classifier = dspy.ChainOfThought(UnsupportedRequestClassifier)
+
+def check_unsupported_request(user_request: str) -> str | None:
+    try:
+        prediction = unsupported_classifier(user_request=user_request)
+        result = getattr(prediction, "classification", "").lower()
+
+        if result == "unsupported":
+            return "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."
+        return None
+    except Exception as e:
+        print(f"⚠️ LLM 분류 중 오류: {e}")
+        return None
 
 class ProductQueryAgent(dspy.Signature):
     """상품 정보를 상담원처럼 자연스럽게 안내하는 도우미입니다.
@@ -571,7 +482,7 @@ class ProductQueryAgent(dspy.Signature):
     지원하지 않는 기능:
     - 추천, 비교, 주문, 배송, 리뷰 등
     
-    예외 처리 시: "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리게습니다."
+    예외 처리 시: "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."
     """
 
     user_request: str = dspy.InputField()
@@ -590,7 +501,6 @@ agent = dspy.ReAct(
         find_product_sale_status,
         find_product_stock,
         find_variant_prices,
-        search_products_by_keyword,
         find_product_by_partial_name,
     ]
 )
@@ -600,14 +510,13 @@ def run_product_agent(user_request: str):
         prediction = agent(user_request=user_request)
         query_result = getattr(prediction, "query_result", None)
         if query_result:
-            # 상담원처럼 자연스러운 응답으로 조정
-            counselor_result = make_response_like_counselor(query_result)
-            # prediction 객체에 조정된 결과 저장
-            prediction.query_result = counselor_result
+            # response_result = make_response_style(query_result)
+            response_result = query_result
+            prediction.query_result = response_result
             print("\n[Query Result - Original]")
             print(query_result)
             print("\n[Query Result - Counselor Style]")
-            print(counselor_result)
+            print(response_result)
 
         def _serialize(obj):
             if isinstance(obj, BaseModel):
