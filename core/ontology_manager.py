@@ -50,12 +50,6 @@ class OntologyManager:
             print(f"❌ S3 다운로드 실패: {e}")
             return False
     
-    from io import StringIO
-
-    from io import BytesIO
-
-    from io import BytesIO
-
     def _load_ontology(self, run_reasoner: bool = False) -> None:
         """온톨로지 로딩 (Lambda 안전 모드: BytesIO 기반)
         
@@ -83,7 +77,6 @@ class OntologyManager:
             owlready2.onto_path.clear()
             owlready2.onto_path.append("/tmp")
 
-            # 메모리 모드 우선
             try:
                 owlready2.default_world.set_backend(filename=":memory:")
                 print("💾 owlready2 백엔드: 메모리 모드")

@@ -73,10 +73,10 @@ def find_product_colors(product_name: str) -> str:
             return f"'{product_name}' 상품의 색상 정보를 찾을 수 없습니다."
         
         result = f"'{product_name}' 상품의 색상 옵션: {', '.join(sorted(colors))}"
-        return adjust_response_style(result)
+        return result
     except Exception as e:
         result = f"색상 검색 중 오류 발생: {e}"
-        return adjust_response_style(result)
+        return result
 
 def find_product_sizes(product_name: str) -> str:
     """특정 상품의 모든 사이즈 옵션을 찾아 반환합니다."""
@@ -114,10 +114,10 @@ def find_product_sizes(product_name: str) -> str:
             return f"'{product_name}' 상품의 사이즈 정보를 찾을 수 없습니다."
         
         result = f"'{product_name}' 상품의 사이즈 옵션: {', '.join(sorted(sizes))}"
-        return adjust_response_style(result)
+        return result
     except Exception as e:
         result = f"사이즈 검색 중 오류 발생: {e}"
-        return adjust_response_style(result)
+        return result
 
 def find_product_price(product_name: str) -> str:
     """특정 상품의 가격 정보를 찾아 반환합니다."""
@@ -141,10 +141,10 @@ def find_product_price(product_name: str) -> str:
             return f"'{product_name}' 상품의 가격 정보를 찾을 수 없습니다."
         price = int(results[0][0])
         result = f"'{product_name}' 상품의 가격: {price:,}원"
-        return adjust_response_style(result)
+        return result
     except Exception as e:
         result = f"가격 검색 중 오류 발생: {e}"
-        return adjust_response_style(result)
+        return result
 
 def find_product_types(product_name: str) -> str:
     """특정 상품의 모든 타입 옵션을 찾아 반환합니다."""
@@ -182,10 +182,10 @@ def find_product_types(product_name: str) -> str:
             return f"'{product_name}' 상품의 타입 정보를 찾을 수 없습니다."
         
         result = f"'{product_name}' 상품의 타입 옵션: {', '.join(sorted(types))}"
-        return adjust_response_style(result)
+        return result
     except Exception as e:
         result = f"타입 검색 중 오류 발생: {e}"
-        return adjust_response_style(result)
+        return result
 
 def find_product_sale_status(product_name: str) -> str:
     """특정 상품의 판매 상태 정보를 찾아 반환합니다."""
@@ -248,7 +248,7 @@ def find_product_sale_status(product_name: str) -> str:
     
     except Exception as e:
         result = f"판매 상태 검색 중 오류 발생: {e}"
-        return adjust_response_style(result)
+        return result
 
 def find_product_stock(product_name: str) -> str:
     """특정 상품의 재고 정보를 찾아 반환합니다."""
@@ -286,13 +286,13 @@ def find_product_stock(product_name: str) -> str:
             result = f"'{product_name}' 상품의 재고 현황:\n"
             result += "\n".join(stock_info)
             result += f"\n\n총 재고: {total_stock:,}개"
-            return adjust_response_style(result)
+            return result
         else:
             return f"'{product_name}' 상품의 재고 정보를 찾을 수 없습니다."
     
     except Exception as e:
         result = f"재고 검색 중 오류 발생: {e}"
-        return adjust_response_style(result)
+        return result
 
 def find_variant_prices(product_name: str) -> str:
     """특정 상품의 옵션별 가격 정보를 찾아 반환합니다."""
@@ -336,13 +336,13 @@ def find_variant_prices(product_name: str) -> str:
             result = f"'{product_name}' 상품의 옵션별 가격:\n"
             result += f"기본 가격: {base_price:,}원\n"
             result += "\n".join(price_info)
-            return adjust_response_style(result)
+            return result
         else:
             return f"'{product_name}' 상품의 옵션별 가격 정보를 찾을 수 없습니다."
     
     except Exception as e:
         result = f"옵션별 가격 검색 중 오류 발생: {e}"
-        return adjust_response_style(result)
+        return result
 
 def find_product_by_partial_name(partial_name: str) -> str:
     """부분 상품명으로 정확한 상품을 찾아 반환합니다."""
@@ -421,11 +421,11 @@ def find_product_by_partial_name(partial_name: str) -> str:
         elif exact_matches and len(exact_matches) == 1:
             result += f"\n💬 정확히 '{exact_matches[0]}'입니다!"
         
-        return adjust_response_style(result)
+        return result
         
     except Exception as e:
         result = f"상품 검색 중 오류 발생: {e}"
-        return adjust_response_style(result)
+        return result
 
 class UnsupportedRequestClassifier(dspy.Signature):
     """사용자 요청이 지원 가능한 범위인지 아닌지를 분류하는 도우미입니다.
@@ -467,8 +467,7 @@ def check_unsupported_request(user_request: str) -> str | None:
         return True
 
 class ProductQueryAgent(dspy.Signature):
-    """
-    항상 상품명 검색을 먼저 시도합니다.
+    """항상 상품명 검색(find_product_by_partial_name)을 먼저 시도합니다.
     고객의 문의에 대해 상담원이 답하는 것처럼
     간결하고 친절한 톤으로 핵심만 안내합니다.
     
@@ -479,8 +478,7 @@ class ProductQueryAgent(dspy.Signature):
     - 재고 없음: "현재 재고가 없어 품절인 상태입니다."
     - 불필요한 인사말/마케팅 문구 제외
     - 긍정 응답: '현재 판매 중입니다', '가능합니다' 등 짧게 안내
-    - 부정 응답: '현재 판매하지 않습니다', '해당 옵션은 제공되지 않습니다' 등으로 직접 안내
-    """
+    - 부정 응답: '현재 판매하지 않습니다', '해당 옵션은 제공되지 않습니다' 등으로 직접 안내"""
 
     user_request: str = dspy.InputField(desc="사용자의 상품 관련 문의")
     chat_history: str = dspy.InputField(desc="전체 채팅 기록(시간순서대로)")
@@ -505,7 +503,7 @@ agent = dspy.ReAct(
 def run_product_agent(user_request: str, chat_history: str):
 
     if check_unsupported_request(user_request):
-        return "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."
+        return None
     
     try:
         prediction = agent(user_request=user_request, chat_history=chat_history)

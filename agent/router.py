@@ -83,7 +83,7 @@ def route_request(user_request: str, chat_history: str = None) -> dict:
                     'success': True,
                     'missing_info': missing_info,
                     'extracted_info': user_info,
-                    'tags': ['정보요청', '필수정보누락']
+                    'tags': ['필수정보누락']
                 }
             else:
                 print("✅ 모든 필수 정보가 확인되었습니다.")
@@ -115,37 +115,41 @@ def route_request(user_request: str, chat_history: str = None) -> dict:
                 result['response'] = getattr(agent_result, 'query_result', '보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다.')
                 result['success'] = True
             else:
-                result['response'] = "상품 정보 조회 중 오류가 발생했습니다."
+                result['response'] = "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."
+                result['tags'] = ['상담원 전환']
         elif category == 'delivery':
             print("🚚 배송 에이전트로 전달...")
             result['agent_used'] = 'delivery_agent'
             result['tags'] = ['배송문의']
             agent_result = run_delivery_agent(user_request, chat_history)
             if agent_result:
-                result['response'] = getattr(agent_result, 'delivery_result', '배송 정보 조회를 완료했습니다.')
+                result['response'] = getattr(agent_result, 'delivery_result', '보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다.')
                 result['success'] = True
             else:
-                result['response'] = "배송 정보 조회 중 오류가 발생했습니다."
+                result['response'] = "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."
+                result['tags'] = ['상담원 전환']
         elif category == 'general':
             print("💬 일반 에이전트로 전달...")
             result['agent_used'] = 'general_agent'
             result['tags'] = ['일반문의']
             agent_result = run_general_agent(user_request, chat_history)
             if agent_result:
-                result['response'] = getattr(agent_result, 'general_result', '일반 문의 처리를 완료했습니다.')
+                result['response'] = getattr(agent_result, 'general_result', '보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다.')
                 result['success'] = True
             else:
-                result['response'] = "일반 문의 처리 중 오류가 발생했습니다."
+                result['response'] = "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."
+                result['tags'] = ['상담원 전환']
         else:
             print("❓ 알 수 없는 카테고리...")
             result['agent_used'] = 'general_agent'
             result['tags'] = ['상담원 전환']
             agent_result = run_general_agent(user_request)
             if agent_result:
-                result['response'] = getattr(agent_result, 'general_result', '문의 처리를 완료했습니다.')
+                result['response'] = getattr(agent_result, 'general_result', '보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다.')
                 result['success'] = True
             else:
-                result['response'] = "문의 처리 중 오류가 발생했습니다."
+                result['response'] = "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."
+                result['tags'] = ['상담원 전환']
             
         return result
         
@@ -155,7 +159,7 @@ def route_request(user_request: str, chat_history: str = None) -> dict:
             'category': 'error',
             'reasoning': f'처리 중 오류 발생: {e}',
             'user_request': user_request,
-            'response': "죄송합니다. 요청 처리 중 오류가 발생했습니다. 다시 시도해주세요.",
+            'response': "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다.",
             'agent_used': 'error_handler',
             'success': False,
             'tags': ['상담원 전환']
@@ -208,13 +212,11 @@ if __name__ == "__main__":
 
     test_cases = [
         {
-            "request": "저번에 산 상품이랑 비교했을 때 이거 블랙 색상이 더 어둡나요?",
+            "request": "저 계정 탈퇴 어떻게 하나요?",
             "messages": [
                 {"personType": "user", "plainText": "안녕하세요!"},
                 {"personType": "user", "plainText": "김철수입니다."},
                 {"personType": "user", "plainText": "010-1234-5678"},
-                {"personType": "user", "plainText": "officer 치노팬츠 L 베이지 가격 얼마죠?"},
-                {"personType": "manager", "plainText": "문의해주신 상품 L, 베이지 옵션의 가격은 63,400원입니다."},
             ]
         }
     ]

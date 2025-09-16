@@ -2,22 +2,25 @@ import dspy
 import os
 
 class ResponseStyleConverter(dspy.Signature):
-    """배송 관련 응답을 간결하고 핵심적으로 정리하는 도우미입니다.
-    
-    배송 정책 기반 응답을 받아서 핵심 정보만 간결하게 전달합니다.
-    불필요한 인사말, 부가 설명, 추가 질문 유도 등은 제거하고 
-    질문에 대한 직접적인 답변만 제공합니다.
-    
-    정리 예시:
-    - "안녕하세요. 조건샵 배송비는 2,500원이며, 7만원 이상 구매시 무료배송입니다. 감사합니다." 
-      → "배송비는 2,500원, 7만원 이상 무료배송입니다."
-    - "배송기간은 영업일 기준 최대 7일이내입니다. 지연시 부분배송 진행됩니다."
-      → "최대 7일이내 배송, 지연시 부분배송."
-    
-    주의사항:
-    - 핵심 정보는 누락하지 않음
-    - 간결하지만 이해하기 쉽게
-    - 정중한 톤은 유지하되 불필요한 표현 제거
+    """
+    - 배송/반품/환불 관련 응답을 상담원처럼 자연스럽게 변환.
+    - 배송 정책 기반 응답을 받아 핵심만 간결하게 제공.
+    - 친절하면서도 직접적인 안내 톤 유지.
+
+    [규칙]
+    - 과도한 인사말, 영업 멘트, 질문 유도 제거
+    - 수치·기간·택배사명·비용 등은 빠짐없이 안내
+    - '고객님께서 부담하셔야 합니다'와 같은 상담 톤 표현 사용
+    - 불가/제한 시: "현재 불가한 점 양해 부탁드립니다."로 마무리
+    - 신용카드 결제 환불하려는데 결제 대금이 청구된 경우: "신용카드 결제대금이 청구된 경우에는 익월 신용카드 대금청구시 카드사에서 환급처리 됩니다"
+
+    [예시 변환]
+    - "주문하시면 3~7일 이내에 CJ대한통운으로 배송됩니다."
+      → "오늘 주문하시면 3~7일 이내에 CJ대한통운을 통해 배송됩니다."
+    - "일부 도서산간 지역은 배송 불가합니다."
+      → "도서산간 지역은 현재 배송이 제공되지 않습니다."
+    - "단순 변심 반품 시 왕복 배송비 6,000원이 부과되며, 환불은 반품 확인 후 2~4 영업일 이내에 처리됩니다."
+      → "단순 변심으로 반품하실 경우 고객님께서 왕복 배송비 6,000원을 부담하셔야 하며, 환불은 반품 확인 후 2~4 영업일 이내에 처리됩니다."
     """
     
     original_response: str = dspy.InputField(desc="원본 배송 관련 응답")
@@ -32,6 +35,7 @@ def adjust_response_style(response: str) -> str:
     try:
         prediction = response_converter(original_response=response)
         converted_response = getattr(prediction, 'refined_response', response)
+        print(converted_response)
         return converted_response.strip()
     except Exception as e:
         print(f"⚠️ 응답 스타일 변환 중 오류: {e}")
@@ -43,7 +47,6 @@ def load_delivery_policy():
         import boto3
         from core.config import config
         
-        # S3에서 배송 정책 파일 다운로드 시도
         try:
             s3_client = boto3.client('s3', region_name=config.AWS_REGION)
             response = s3_client.get_object(
@@ -64,13 +67,15 @@ def load_delivery_policy():
 class DeliveryAgent(dspy.Signature):
     """배송 관련 문의를 처리하는 전문 상담원입니다.
     
-    사용자의 질문에만 간결하고 정확하게 답변합니다.
-    불필요한 인사말이나 추가 설명 없이 핵심 정보만 제공합니다.
+    - 사용자의 질문에만 간결하고 정확하게 답변합니다.
+    - 불필요한 인사말이나 추가 설명 없이 핵심 정보만 제공합니다.
+    - 응답은 항상 친절하면서도 직접적인 톤을 유지합니다.
+    - 배송 정책 기반 응답에서 필요한 정보만 간결히 안내합니다.
     """
 
     user_request: str = dspy.InputField(desc="사용자의 배송 관련 문의")
-    delivery_policy: str = dspy.InputField(desc="조건샵의 배송 정책 및 택배사 정보")
-    delivery_result: str = dspy.OutputField(desc="질문에 대한 간결하고 정확한 답변 (핵심 정보만)")
+    delivery_policy: str = dspy.InputField(desc="배송 정책 및 택배사 정보")
+    delivery_result: str = dspy.OutputField(desc="질문에 대한 간결하고 정확한 답변")
 
 delivery_agent = dspy.ChainOfThought(DeliveryAgent)
 
