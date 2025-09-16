@@ -29,7 +29,7 @@ class GeneralAgent(dspy.Signature):
 general_agent = dspy.ChainOfThought(GeneralAgent)
 general_response_refiner = dspy.ChainOfThought(GeneralResponseRefiner)
 
-def run_general_agent(user_request: str):
+def run_general_agent(user_request: str, chat_history: str):
     """일반 에이전트를 실행합니다."""
     try:
         prediction = general_agent(user_request=user_request)

@@ -1,7 +1,7 @@
 import dspy
 import os
 
-class DeliveryResponseRefiner(dspy.Signature):
+class ResponseStyleConverter(dspy.Signature):
     """배송 관련 응답을 간결하고 핵심적으로 정리하는 도우미입니다.
     
     배송 정책 기반 응답을 받아서 핵심 정보만 간결하게 전달합니다.
@@ -23,46 +23,19 @@ class DeliveryResponseRefiner(dspy.Signature):
     original_response: str = dspy.InputField(desc="원본 배송 관련 응답")
     refined_response: str = dspy.OutputField(desc="간결하게 정리된 핵심 응답")
 
-delivery_response_refiner = dspy.ChainOfThought(DeliveryResponseRefiner)
+response_converter = dspy.ChainOfThought(ResponseStyleConverter)
 
-def make_response_concise(response: str) -> str:
-    """
-    DSPy를 사용하여 배송 에이전트의 응답을 간결하게 조정합니다.
-    
-    Args:
-        response (str): 원본 응답 텍스트
-        
-    Returns:
-        str: 간결하게 조정된 응답 텍스트
-    """
+def adjust_response_style(response: str) -> str:
     if not response or not isinstance(response, str):
         return response
     
     try:
-        prediction = delivery_response_refiner(original_response=response)
-        refined_response = getattr(prediction, 'refined_response', response)
-        return refined_response.strip()
+        prediction = response_converter(original_response=response)
+        converted_response = getattr(prediction, 'refined_response', response)
+        return converted_response.strip()
     except Exception as e:
-        print(f"⚠️ 배송 응답 정리 중 오류: {e}")
-        # 오류 시 기본 변환 사용
-        return _fallback_refine(response)
-
-def _fallback_refine(response: str) -> str:
-    """DSPy 실패 시 사용할 기본 정리 로직"""
-    # 간단한 정리 규칙
-    unwanted = ["안녕하세요", "고객님", "감사합니다", "문의해주세요"]
-    result = response
-    for phrase in unwanted:
-        result = result.replace(phrase, "")
-    
-    # 공백 정리
-    import re
-    result = re.sub(r'\s+', ' ', result).strip()
-    
-    if not result.endswith('.'):
-        result += '.'
-        
-    return result
+        print(f"⚠️ 응답 스타일 변환 중 오류: {e}")
+        return "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."
 
 def load_delivery_policy():
     """배송 정책 파일을 로드합니다."""
@@ -78,7 +51,7 @@ def load_delivery_policy():
                 Key='policy.txt'
             )
             content = response['Body'].read().decode('utf-8')
-            print("✅ S3에서 배송 정책 파일 로드 성공")
+            print("✅ S3에서 정책 파일 로드 성공")
             return content
         except Exception as s3_error:
             print(f"❌ S3에서 배송 정책 파일 로드 실패: {s3_error}")
@@ -101,10 +74,9 @@ class DeliveryAgent(dspy.Signature):
 
 delivery_agent = dspy.ChainOfThought(DeliveryAgent)
 
-def run_delivery_agent(user_request: str):
+def run_delivery_agent(user_request: str, chat_history: str):
     """배송 에이전트를 실행합니다."""
     try:
-        # 배송 정책 정보 로드
         delivery_policy = load_delivery_policy()
         
         print(f"🚚 배송 문의 처리 중: {user_request}")
@@ -116,7 +88,7 @@ def run_delivery_agent(user_request: str):
         
         if hasattr(prediction, 'delivery_result') and prediction.delivery_result:
             original_result = prediction.delivery_result
-            concise_result = make_response_concise(original_result)
+            concise_result = adjust_response_style(original_result)
             prediction.delivery_result = concise_result
         return prediction
         

@@ -3,46 +3,39 @@ import json
 import dspy
 from core.ontology_manager import get_ontology_manager
 
-# class ResponseStyleConverter(dspy.Signature):
-#     """상품 정보 응답을 상담원처럼 자연스럽게 변환하는 도우미입니다.
+class ResponseStyleConverter(dspy.Signature):
+    """
+    - 상품 문의 관련 응답을 상담원처럼 자연스럽게 변환.
+    - 핵심만 간결하게 제공.
+    - 친절하면서도 직접적인 안내 톤.
+    - 상품명은 언급 금지. '문의해주신 상품'이라 표현.
     
-#     원본 응답을 받아서 상담원이 고객에게 말하는 것처럼 자연스럽고 친절한 톤으로 변환합니다.
-    
-#     변환 예시:
-#     - "'티셔츠' 상품의 색상 옵션: 블랙, 화이트" → "문의해주신 상품은 블랙, 화이트 색상 있습니다"
-#     - "'청바지' 상품의 가격: 25000원" → "문의해주신 상품의 가격은 25,000원입니다"
-    
-#     주의사항:
-#     - 과도한 인사말이나 추가 질문 유도는 제거
-#     - 간결하면서도 친절한 상담원 톤 유지
-#     - 가격은 천 단위 쉼표 포함
-#     """
-    
-#     original_response: str = dspy.InputField(desc="원본 상품 정보 응답")
-#     counselor_response: str = dspy.OutputField(desc="상담원처럼 자연스럽게 변환된 응답")
+    [재고 관련 톤 규칙]
+    - 재고 있음: "현재 재고가 있어 판매 중입니다. \n\n 다만, 재고는 실시간 변동되므로 참고만 부탁드립니다."
+    - 재고 없음: "현재 재고가 없어 품절인 상태입니다."
 
-# response_converter = dspy.ChainOfThought(ResponseStyleConverter)
+    주의사항:
+    - 과도한 인사말, 영업 멘트, 질문 유도 제거
+    - '없음/불가/판매하지 않음'일 경우: 안내 + '상품명 확인 부탁드립니다' 형태로 마무리
+    - 가격은 천 단위 쉼표 포함
+    """
+    
+    original_response: str = dspy.InputField(desc="상품 문의 관련 응답")
+    counselor_response: str = dspy.OutputField(desc="자연스럽게 변환된 응답")
 
-# def make_response_style(response: str) -> str:
-#     """
-#     DSPy를 사용하여 상품 에이전트의 응답 톤앤매너를 조정합니다.
+response_converter = dspy.ChainOfThought(ResponseStyleConverter)
+
+def adjust_response_style(response: str) -> str:
+    if not response or not isinstance(response, str):
+        return response
     
-#     Args:
-#         response (str): 원본 응답 텍스트
-        
-#     Returns:
-#         str: 자연스럽게 조정된 응답 텍스트
-#     """
-#     if not response or not isinstance(response, str):
-#         return response
-    
-#     try:
-#         prediction = response_converter(original_response=response)
-#         converted_response = getattr(prediction, 'counselor_response', response)
-#         return converted_response.strip()
-#     except Exception as e:
-#         print(f"⚠️ 응답 변환 중 오류: {e}")
-#         return "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."
+    try:
+        prediction = response_converter(original_response=response)
+        converted_response = getattr(prediction, 'counselor_response', response)
+        return converted_response.strip()
+    except Exception as e:
+        print(f"⚠️ 응답 스타일 변환 중 오류: {e}")
+        return "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."
 
 def find_product_colors(product_name: str) -> str:
     """특정 상품의 모든 색상 옵션을 찾아 반환합니다."""
@@ -80,12 +73,10 @@ def find_product_colors(product_name: str) -> str:
             return f"'{product_name}' 상품의 색상 정보를 찾을 수 없습니다."
         
         result = f"'{product_name}' 상품의 색상 옵션: {', '.join(sorted(colors))}"
-        # return make_response_style(result)
-        return result
+        return adjust_response_style(result)
     except Exception as e:
         result = f"색상 검색 중 오류 발생: {e}"
-        # return make_response_style(result)
-        return result
+        return adjust_response_style(result)
 
 def find_product_sizes(product_name: str) -> str:
     """특정 상품의 모든 사이즈 옵션을 찾아 반환합니다."""
@@ -123,12 +114,10 @@ def find_product_sizes(product_name: str) -> str:
             return f"'{product_name}' 상품의 사이즈 정보를 찾을 수 없습니다."
         
         result = f"'{product_name}' 상품의 사이즈 옵션: {', '.join(sorted(sizes))}"
-        # return make_response_style(result)
-        return result
+        return adjust_response_style(result)
     except Exception as e:
         result = f"사이즈 검색 중 오류 발생: {e}"
-        # return make_response_style(result)
-        return result
+        return adjust_response_style(result)
 
 def find_product_price(product_name: str) -> str:
     """특정 상품의 가격 정보를 찾아 반환합니다."""
@@ -152,12 +141,10 @@ def find_product_price(product_name: str) -> str:
             return f"'{product_name}' 상품의 가격 정보를 찾을 수 없습니다."
         price = int(results[0][0])
         result = f"'{product_name}' 상품의 가격: {price:,}원"
-        # return make_response_style(result)
-        return result
+        return adjust_response_style(result)
     except Exception as e:
         result = f"가격 검색 중 오류 발생: {e}"
-        # return make_response_style(result)
-        return result
+        return adjust_response_style(result)
 
 def find_product_types(product_name: str) -> str:
     """특정 상품의 모든 타입 옵션을 찾아 반환합니다."""
@@ -194,9 +181,11 @@ def find_product_types(product_name: str) -> str:
         if not types:
             return f"'{product_name}' 상품의 타입 정보를 찾을 수 없습니다."
         
-        return f"'{product_name}' 상품의 타입 옵션: {', '.join(sorted(types))}"
+        result = f"'{product_name}' 상품의 타입 옵션: {', '.join(sorted(types))}"
+        return adjust_response_style(result)
     except Exception as e:
-        return f"타입 검색 중 오류 발생: {e}"
+        result = f"타입 검색 중 오류 발생: {e}"
+        return adjust_response_style(result)
 
 def find_product_sale_status(product_name: str) -> str:
     """특정 상품의 판매 상태 정보를 찾아 반환합니다."""
@@ -258,7 +247,8 @@ def find_product_sale_status(product_name: str) -> str:
             return f"'{product_name}' 상품의 판매 상태 정보를 찾을 수 없습니다."
     
     except Exception as e:
-        return f"판매 상태 검색 중 오류 발생: {e}"
+        result = f"판매 상태 검색 중 오류 발생: {e}"
+        return adjust_response_style(result)
 
 def find_product_stock(product_name: str) -> str:
     """특정 상품의 재고 정보를 찾아 반환합니다."""
@@ -296,12 +286,13 @@ def find_product_stock(product_name: str) -> str:
             result = f"'{product_name}' 상품의 재고 현황:\n"
             result += "\n".join(stock_info)
             result += f"\n\n총 재고: {total_stock:,}개"
-            return result
+            return adjust_response_style(result)
         else:
             return f"'{product_name}' 상품의 재고 정보를 찾을 수 없습니다."
     
     except Exception as e:
-        return f"재고 검색 중 오류 발생: {e}"
+        result = f"재고 검색 중 오류 발생: {e}"
+        return adjust_response_style(result)
 
 def find_variant_prices(product_name: str) -> str:
     """특정 상품의 옵션별 가격 정보를 찾아 반환합니다."""
@@ -345,12 +336,13 @@ def find_variant_prices(product_name: str) -> str:
             result = f"'{product_name}' 상품의 옵션별 가격:\n"
             result += f"기본 가격: {base_price:,}원\n"
             result += "\n".join(price_info)
-            return result
+            return adjust_response_style(result)
         else:
             return f"'{product_name}' 상품의 옵션별 가격 정보를 찾을 수 없습니다."
     
     except Exception as e:
-        return f"옵션별 가격 검색 중 오류 발생: {e}"
+        result = f"옵션별 가격 검색 중 오류 발생: {e}"
+        return adjust_response_style(result)
 
 def find_product_by_partial_name(partial_name: str) -> str:
     """부분 상품명으로 정확한 상품을 찾아 반환합니다."""
@@ -429,10 +421,11 @@ def find_product_by_partial_name(partial_name: str) -> str:
         elif exact_matches and len(exact_matches) == 1:
             result += f"\n💬 정확히 '{exact_matches[0]}'입니다!"
         
-        return result
+        return adjust_response_style(result)
         
     except Exception as e:
-        return f"상품 검색 중 오류 발생: {e}"
+        result = f"상품 검색 중 오류 발생: {e}"
+        return adjust_response_style(result)
 
 class UnsupportedRequestClassifier(dspy.Signature):
     """사용자 요청이 지원 가능한 범위인지 아닌지를 분류하는 도우미입니다.
@@ -454,6 +447,7 @@ class UnsupportedRequestClassifier(dspy.Signature):
     """
     user_request: str = dspy.InputField()
     classification: str = dspy.OutputField(desc="'supported' 또는 'unsupported'")
+    reasoning: str = dspy.OutputField(desc="분류 근거에 대한 간단한 설명")
 
 unsupported_classifier = dspy.ChainOfThought(UnsupportedRequestClassifier)
 
@@ -461,39 +455,42 @@ def check_unsupported_request(user_request: str) -> str | None:
     try:
         prediction = unsupported_classifier(user_request=user_request)
         result = getattr(prediction, "classification", "").lower()
+        reasoning = getattr(prediction, "reasoning", "")
 
         if result == "unsupported":
-            return "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."
-        return None
+            print(f"⚠️ 지원하지 않는 문의: {reasoning}")
+            return True
+        print(f"✅ 지원하는 문의: {user_request}")
+        return False
     except Exception as e:
         print(f"⚠️ LLM 분류 중 오류: {e}")
-        return None
+        return True
 
 class ProductQueryAgent(dspy.Signature):
-    """상품 정보를 상담원처럼 자연스럽게 안내하는 도우미입니다.
+    """
+    항상 상품명 검색을 먼저 시도합니다.
+    고객의 문의에 대해 상담원이 답하는 것처럼
+    간결하고 친절한 톤으로 핵심만 안내합니다.
     
-    "문의해주신 상품은 ~~색상 있습니다" 같은 상담원 말투로 친절하게 답변합니다.
-    고객의 문의에 대해 정확한 정보를 제공하면서도 자연스러운 대화 톤을 유지합니다.
-    
-    지원하는 기능:
-    - 상품 색상, 사이즈, 타입, 가격, 재고, 판매 상태 조회
-    - 상품 검색
-    
-    지원하지 않는 기능:
-    - 추천, 비교, 주문, 배송, 리뷰 등
-    
-    예외 처리 시: "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."
+    규칙:
+    - 상품명은 직접 언급하지 않고 '문의해주신 상품'이라 표현
+    - 없는 옵션일 경우: '현재 제공되지 않습니다.' 형태로 안내
+    - 재고 있음: "현재 재고가 있어 판매 중입니다. \n\n 다만, 재고는 실시간 변동되므로 참고만 부탁드립니다."
+    - 재고 없음: "현재 재고가 없어 품절인 상태입니다."
+    - 불필요한 인사말/마케팅 문구 제외
+    - 긍정 응답: '현재 판매 중입니다', '가능합니다' 등 짧게 안내
+    - 부정 응답: '현재 판매하지 않습니다', '해당 옵션은 제공되지 않습니다' 등으로 직접 안내
     """
 
-    user_request: str = dspy.InputField()
+    user_request: str = dspy.InputField(desc="사용자의 상품 관련 문의")
+    chat_history: str = dspy.InputField(desc="전체 채팅 기록(시간순서대로)")
     query_result: str = dspy.OutputField(
-        desc="상담원처럼 친절하고 자연스러운 답변 (문의해주신 상품은 ~~ 있습니다 스타일)"
+        desc="고객의 문의에 대해 정확한 정보를 핵심만 간결하게 제공."
     )
 
 agent = dspy.ReAct(
     ProductQueryAgent,
     tools=[
-        check_unsupported_request,
         find_product_colors,
         find_product_sizes,
         find_product_types,
@@ -505,12 +502,16 @@ agent = dspy.ReAct(
     ]
 )
 
-def run_product_agent(user_request: str):
+def run_product_agent(user_request: str, chat_history: str):
+
+    if check_unsupported_request(user_request):
+        return "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."
+    
     try:
-        prediction = agent(user_request=user_request)
+        prediction = agent(user_request=user_request, chat_history=chat_history)
         query_result = getattr(prediction, "query_result", None)
         if query_result:
-            # response_result = make_response_style(query_result)
+            response_result = adjust_response_style(query_result)
             response_result = query_result
             prediction.query_result = response_result
             print("\n[Query Result - Original]")

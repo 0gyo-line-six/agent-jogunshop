@@ -67,7 +67,7 @@ def classify_user_request(user_request: str) -> tuple[str, str]:
 def route_request(user_request: str, chat_history: str = None) -> dict:
     """사용자 요청을 적절한 에이전트로 라우팅합니다."""
     try:
-        print(f"📝 사용자 요청: {user_request}")
+        print(f"📝 사용자 요청:\n{user_request}")
         
         if chat_history:
             user_info = extract_user_info(chat_history)
@@ -110,9 +110,9 @@ def route_request(user_request: str, chat_history: str = None) -> dict:
             print("🛍️ 상품 에이전트로 전달...")
             result['agent_used'] = 'product_agent'
             result['tags'] = ['상품문의']
-            agent_result = run_product_agent(user_request)
+            agent_result = run_product_agent(user_request, chat_history)
             if agent_result:
-                result['response'] = getattr(agent_result, 'query_result', '상품 정보 조회를 완료했습니다.')
+                result['response'] = getattr(agent_result, 'query_result', '보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다.')
                 result['success'] = True
             else:
                 result['response'] = "상품 정보 조회 중 오류가 발생했습니다."
@@ -120,7 +120,7 @@ def route_request(user_request: str, chat_history: str = None) -> dict:
             print("🚚 배송 에이전트로 전달...")
             result['agent_used'] = 'delivery_agent'
             result['tags'] = ['배송문의']
-            agent_result = run_delivery_agent(user_request)
+            agent_result = run_delivery_agent(user_request, chat_history)
             if agent_result:
                 result['response'] = getattr(agent_result, 'delivery_result', '배송 정보 조회를 완료했습니다.')
                 result['success'] = True
@@ -130,7 +130,7 @@ def route_request(user_request: str, chat_history: str = None) -> dict:
             print("💬 일반 에이전트로 전달...")
             result['agent_used'] = 'general_agent'
             result['tags'] = ['일반문의']
-            agent_result = run_general_agent(user_request)
+            agent_result = run_general_agent(user_request, chat_history)
             if agent_result:
                 result['response'] = getattr(agent_result, 'general_result', '일반 문의 처리를 완료했습니다.')
                 result['success'] = True
@@ -199,7 +199,7 @@ if __name__ == "__main__":
         
         return "\n".join(history_lines)
 
-    print("🚀 조군샵 에이전트 테스트")
+    print("🚀 에이전트 테스트")
     print("=" * 100)
     
     if not setup_dspy():
@@ -208,11 +208,13 @@ if __name__ == "__main__":
 
     test_cases = [
         {
-            "request": "배송비 얼마인가요?",
+            "request": "저번에 산 상품이랑 비교했을 때 이거 블랙 색상이 더 어둡나요?",
             "messages": [
                 {"personType": "user", "plainText": "안녕하세요!"},
                 {"personType": "user", "plainText": "김철수입니다."},
                 {"personType": "user", "plainText": "010-1234-5678"},
+                {"personType": "user", "plainText": "officer 치노팬츠 L 베이지 가격 얼마죠?"},
+                {"personType": "manager", "plainText": "문의해주신 상품 L, 베이지 옵션의 가격은 63,400원입니다."},
             ]
         }
     ]
