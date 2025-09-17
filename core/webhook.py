@@ -219,8 +219,9 @@ class ChatService:
             log(self.request_id, "WEBHOOK", f"AI 응답 생성 완료: '{last_message}' ({end_time - start_time:.1f}초)")
             
             tags = result.get('tags')
+            print(f"tags: {tags}")
             response = result.get('response', '보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다.')
-            
+            print(f"response: {response}")
             return response, tags
         except Exception as e:
             log(self.request_id, "ERROR", f"응답 생성 중 오류: {e}")
@@ -248,14 +249,20 @@ class ChatService:
         url = f"{config.CHANNEL_API_BASE_URL}/user-chats/{self.chat_id}/messages"
         headers = { "accept": "application/json", "Content-Type": "application/json", "x-access-key": config.CHANNEL_ACCESS_KEY, "x-access-secret": config.CHANNEL_ACCESS_SECRET }
         payload = {"blocks": [{"type": "text", "value": message}]}
-        
-        if tags:
-            payload["tags"] = tags
         try:
             response = requests.post(url, headers=headers, json=payload, timeout=10)
             if response.status_code == 200:
                 end_time = time.time()
                 log(self.request_id, "WEBHOOK", f"메시지 전송 성공: '{message}' ({end_time - start_time:.1f}초)")
+                if tags:
+                    base_url =f"{config.CHANNEL_API_BASE_URL}/user-chats/{self.chat_id}"
+                    headers = { "accept": "application/json", "Content-Type": "application/json", "x-access-key": config.CHANNEL_ACCESS_KEY, "x-access-secret": config.CHANNEL_ACCESS_SECRET }
+                    payload = {"tags": tags}
+                    response = requests.post(base_url, headers=headers, json=payload, timeout=10)
+                    if response.status_code == 200:
+                        log(self.request_id, "WEBHOOK", f"태그 전송 성공: '{tags}' ({end_time - start_time:.1f}초)")
+                    else:
+                        log(self.request_id, "ERROR", f"태그 전송 실패: {response.status_code} {response.text}")
                 return {"status": "OK", "message": "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."}, 200
             else:
                 log(self.request_id, "ERROR", f"메시지 전송 실패: {response.status_code} {response.text}")

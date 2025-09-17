@@ -109,47 +109,47 @@ def route_request(user_request: str, chat_history: str = None) -> dict:
         if category == 'product':
             print("🛍️ 상품 에이전트로 전달...")
             result['agent_used'] = 'product_agent'
-            result['tags'] = ['상품문의']
+            result['tags'] += ['상품문의']
             agent_result = run_product_agent(user_request, chat_history)
             if agent_result:
                 result['response'] = getattr(agent_result, 'query_result', '보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다.')
                 result['success'] = True
             else:
                 result['response'] = "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."
-                result['tags'] = ['상담원 전환']
+                result['tags'] += ['상담원전환']
         elif category == 'delivery':
             print("🚚 배송 에이전트로 전달...")
             result['agent_used'] = 'delivery_agent'
-            result['tags'] = ['배송문의']
+            result['tags'] += ['배송문의']
             agent_result = run_delivery_agent(user_request, chat_history)
             if agent_result:
                 result['response'] = getattr(agent_result, 'delivery_result', '보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다.')
                 result['success'] = True
             else:
                 result['response'] = "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."
-                result['tags'] = ['상담원 전환']
+                result['tags'] += ['상담원전환']
         elif category == 'general':
             print("💬 일반 에이전트로 전달...")
             result['agent_used'] = 'general_agent'
-            result['tags'] = ['일반문의']
+            result['tags'] += ['일반문의']
             agent_result = run_general_agent(user_request, chat_history)
             if agent_result:
                 result['response'] = getattr(agent_result, 'general_result', '보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다.')
                 result['success'] = True
             else:
                 result['response'] = "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."
-                result['tags'] = ['상담원 전환']
+                result['tags'] += ['상담원전환']
         else:
             print("❓ 알 수 없는 카테고리...")
             result['agent_used'] = 'general_agent'
-            result['tags'] = ['상담원 전환']
+            result['tags'] += ['상담원전환']
             agent_result = run_general_agent(user_request)
             if agent_result:
                 result['response'] = getattr(agent_result, 'general_result', '보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다.')
                 result['success'] = True
             else:
                 result['response'] = "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."
-                result['tags'] = ['상담원 전환']
+                result['tags'] += ['상담원전환']
             
         return result
         
@@ -162,7 +162,7 @@ def route_request(user_request: str, chat_history: str = None) -> dict:
             'response': "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다.",
             'agent_used': 'error_handler',
             'success': False,
-            'tags': ['상담원 전환']
+            'tags': ['상담원전환']
         }
 
 if __name__ == "__main__":
