@@ -258,7 +258,7 @@ class ChatService:
                     base_url =f"{config.CHANNEL_API_BASE_URL}/user-chats/{self.chat_id}"
                     headers = { "accept": "application/json", "Content-Type": "application/json", "x-access-key": config.CHANNEL_ACCESS_KEY, "x-access-secret": config.CHANNEL_ACCESS_SECRET }
                     payload = {"tags": tags}
-                    response = requests.post(base_url, headers=headers, json=payload, timeout=10)
+                    response = requests.patch(base_url, headers=headers, json=payload, timeout=10)
                     if response.status_code == 200:
                         log(self.request_id, "WEBHOOK", f"태그 전송 성공: '{tags}' ({end_time - start_time:.1f}초)")
                     else:
