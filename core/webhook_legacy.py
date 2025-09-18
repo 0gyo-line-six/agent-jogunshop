@@ -1,11 +1,7 @@
 import json, requests, boto3, time, uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from enum import Enum
 from typing import Dict, Any, List, Tuple, Optional
-
-from botocore.exceptions import ClientError
-
 from core.config import config, log
 from agent.router import route_request
 
@@ -30,14 +26,6 @@ class ParseResult:
     chat_id: Optional[str]
     message: str
     is_valid: bool
-    message_id: Optional[str] = None
-
-
-class UpdateStateResult(Enum):
-    """메시지 상태 업데이트 결과"""
-    UPDATED = "updated"
-    DUPLICATE = "duplicate"
-    FAILED = "failed"
 
 class WebhookParser:
     """웹훅 페이로드 파싱 및 검증 담당"""
@@ -50,28 +38,26 @@ class WebhookParser:
         webhook_type = payload.get("type")
         entity = payload.get("entity", {})
         refers = payload.get("refers", {})
-        chat_id, message, person_type, message_id = None, "", "", None
+        chat_id, message, person_type = None, "", ""
         
         if webhook_type == "userChat":
             chat_id = entity.get("id")
             message = refers.get("message", {}).get("plainText", "")
             person_type = refers.get("message", {}).get("personType")
-            message_id = refers.get("message", {}).get("id")
         elif webhook_type == "message":
             chat_id = entity.get("chatId")
             message = entity.get("plainText", "")
             person_type = entity.get("personType")
-            message_id = entity.get("id")
 
         end_time = time.time()
         log(self.request_id, "WEBHOOK", f"페이로드 파싱 완료: {end_time - start_time:.1f}초")
-        log(self.request_id, "WEBHOOK", f"chat_id: {chat_id}, webhook_type: {webhook_type}, message_id: {message_id}, message: {message}, person_type: {person_type}")
+        log(self.request_id, "WEBHOOK", f"chat_id: {chat_id}, webhook_type: {webhook_type}, message: {message}, person_type: {person_type}")
         
         if not chat_id or not message or person_type != "user":
             log(self.request_id, "ERROR", "처리 대상이 아닌 메시지 (chat_id, message, personType 누락/불일치)")
             return ParseResult(None, "", False)
 
-        return ParseResult(chat_id, message.strip(), True, message_id)
+        return ParseResult(chat_id, message.strip(), True)
 
 class MessageRepository:
     """DynamoDB를 사용한 채팅 상태 관리"""
@@ -79,53 +65,27 @@ class MessageRepository:
         self.request_id = request_id
         self.table = dynamodb.Table(config.DYNAMODB_TABLE_NAME)
     
-    def update_state(self, chat_id: str, new_message: str, message_id: Optional[str] = None) -> UpdateStateResult:
+    def update_state(self, chat_id: str, new_message: str) -> bool:
         """DynamoDB 이용하여 상태를 안전하게 업데이트"""
         log(self.request_id, "DYNAMODB", f"상태 업데이트 시작: chat_id={chat_id}")
         start_time = time.time()
-
-        expression_attribute_names = {'#msgs': 'message_list', '#ts': 'timestamp'}
-        expression_attribute_values = {
-            ':new_vals': [new_message],
-            ':empty_list': [],
-            ':ts': TimeUtils.kst_timestamp()
-        }
-
-        update_expression = "SET #msgs = list_append(if_not_exists(#msgs, :empty_list), :new_vals), #ts = :ts"
-        condition_expression = None
-
-        if message_id:
-            expression_attribute_names['#msg_ids'] = 'message_ids'
-            expression_attribute_values[':message_id'] = message_id
-            expression_attribute_values[':msg_id_set'] = {message_id}
-            update_expression += " ADD #msg_ids :msg_id_set"
-            condition_expression = "attribute_not_exists(#msg_ids) OR not contains(#msg_ids, :message_id)"
-
         try:
-            update_kwargs = {
-                'Key': {'chat_id': chat_id},
-                'UpdateExpression': update_expression,
-                'ExpressionAttributeNames': expression_attribute_names,
-                'ExpressionAttributeValues': expression_attribute_values
-            }
-
-            if condition_expression:
-                update_kwargs['ConditionExpression'] = condition_expression
-
-            self.table.update_item(**update_kwargs)
+            self.table.update_item(
+                Key={'chat_id': chat_id},
+                UpdateExpression="SET #msgs = list_append(if_not_exists(#msgs, :empty_list), :new_vals), #ts = :ts",
+                ExpressionAttributeNames={'#msgs': 'message_list', '#ts': 'timestamp'},
+                ExpressionAttributeValues={
+                    ':new_vals': [new_message],
+                    ':empty_list': [],
+                    ':ts': TimeUtils.kst_timestamp()
+                }
+            )
             end_time = time.time()
             log(self.request_id, "DYNAMODB", f"상태 업데이트 성공 ({end_time - start_time:.1f}초)")
-            return UpdateStateResult.UPDATED
-        except ClientError as e:
-            error_code = e.response.get('Error', {}).get('Code')
-            if error_code == 'ConditionalCheckFailedException' and message_id:
-                log(self.request_id, "INFO", f"중복 메시지 감지로 상태 업데이트 생략: chat_id={chat_id}, message_id={message_id}")
-                return UpdateStateResult.DUPLICATE
-            log(self.request_id, "ERROR", f"상태 업데이트 실패: {e}")
-            return UpdateStateResult.FAILED
+            return True
         except Exception as e:
             log(self.request_id, "ERROR", f"상태 업데이트 실패: {e}")
-            return UpdateStateResult.FAILED
+            return False
     
     def get_and_clear_state(self, chat_id: str) -> str:
         """최종 메시지 상태를 가져온 후, 해당 아이템을 삭제"""
@@ -217,20 +177,13 @@ class MessageOrchestrator:
         self.repository = MessageRepository(request_id)
         self.scheduler = StepFunctionsClient(request_id)
         
-    def orchestrate_processing(self, chat_id: str, message: str, message_id: Optional[str] = None) -> bool:
+    def orchestrate_processing(self, chat_id: str, message: str) -> bool:
         """메시지 상태를 업데이트하고 최종 처리를 예약"""
-        update_result = self.repository.update_state(chat_id, message, message_id)
-
-        if update_result == UpdateStateResult.DUPLICATE:
-            log(self.request_id, "WEBHOOK", f"중복 웹훅 감지로 실행 생략: chat_id={chat_id}, message_id={message_id}")
-            return True
-
-        if update_result != UpdateStateResult.UPDATED:
-            return False
-
+        if not self.repository.update_state(chat_id, message):
+            return False            
         if not self.scheduler.start_execution(chat_id):
             return False
-
+            
         return True
 
 class ChatService:
@@ -331,7 +284,7 @@ class WebhookHandler:
         if not parse_result.is_valid:
             return {"status": "OK", "message": "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."}, 200
         
-        if self.orchestrator.orchestrate_processing(parse_result.chat_id, parse_result.message, parse_result.message_id):
+        if self.orchestrator.orchestrate_processing(parse_result.chat_id, parse_result.message):
             return {"status": "OK", "message": "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."}, 200
         else:
             return {"status": "ERROR", "message": "보다 정확하고 친절한 안내를 위해 확인 중입니다. 잠시 기다려주시면 빠른 응대 도와드리겠습니다."}, 500
